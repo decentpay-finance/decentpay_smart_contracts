@@ -913,7 +913,7 @@ contract BEP20 is Context, IBEP20, Ownable {
 pragma solidity 0.6.12;
 
 // LittleDogeCoin with Governance.
-contract LittleDogeCoin is BEP20('Little Doge Coin ', 'LilDOGEv4') {
+contract LittleDogeCoin is BEP20('Little Doge Coin ', 'LilDOGE') {
     
     // Copied and modified from YAM code:
     // https://github.com/yam-finance/yam-protocol/blob/master/contracts/token/YAMGovernanceStorage.sol
