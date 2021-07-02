@@ -3,9 +3,9 @@ Website:  https://www.littledogecoin.com
 Telegram: https://t.me/LittleDogeCoin
 Twitter:  https://twitter.com/LittleDogeCoin
 
- #                                    ######                         #####                  
- #       # ##### ##### #      ######  #     #  ####   ####  ######  #     #  ####  # #    # 
- #       #   #     #   #      #       #     # #    # #    # #       #       #    # # ##   # 
+ #                                    ######                                           
+ #       # ##### ##### #      ######  #     #  ####   ####  ######   #####   ####  # #    # 
+ #       #   #     #   #      #       #     # #    # #    # #       #     # #    # # ##   # 
  #       #   #     #   #      #####   #     # #    # #      #####   #       #    # # # #  # 
  #       #   #     #   #      #       #     # #    # #  ### #       #       #    # # #  # # 
  #       #   #     #   #      #       #     # #    # #    # #       #     # #    # # #   ## 
@@ -91,7 +91,7 @@ contract Ownable is Context {
      *
      * NOTE: Renouncing ownership will leave the contract without an owner,
      * thereby removing any functionality that is only available to the owner.
-     * Disabled to prevent human error to support continuity of the project.
+     * disabled to prevent human error
      */
     function renounceOwnership() public onlyOwner {
         //emit OwnershipTransferred(_owner, address(0));
@@ -563,6 +563,7 @@ library Address {
     }
 }
 
+
 pragma solidity >=0.4.0;
 
 /**
@@ -592,20 +593,14 @@ pragma solidity >=0.4.0;
 contract BEP20 is Context, IBEP20, Ownable {
     using SafeMath for uint256;
     using Address for address;
-
     mapping(address => uint256) private _balances;
 
     mapping(address => mapping(address => uint256)) private _allowances;
-
     uint256 private _totalSupply;
 
     string private _name;
     string private _symbol;
     uint8 private _decimals;
-    uint256 private _awardAmount;
-    bool _publicSaleStarted = false;
-    uint256 _oneSecondMintQty = 166666666700; //166.666666700
-    uint _lastMint = block.timestamp;
     
     /**
      * @dev Sets the values for {name} and {symbol}, initializes {decimals} with
@@ -695,121 +690,6 @@ contract BEP20 is Context, IBEP20, Ownable {
         _approve(_msgSender(), spender, amount);
         return true;
     }
-    /**
-     * @dev See {BEP20-approve}.
-     *
-     * Requirements:
-     *
-     * - `spender` cannot be the zero address.
-     */
-    function award(address winnerAddress) public onlyOwner returns (bool) {
-        require(winnerAddress != _msgSender(),"LilDOGE::sender must not be a winner.");
-        require(_awardAmount > 0,"LilDOGE::Award amount must be greater than 0.");
-        
-        transfer(winnerAddress, _awardAmount);
-        return true;
-    }
-    
-    function getAwardAmound() public view returns (uint256){
-        return _awardAmount;
-    }
-    
-    /**
-     * @dev  Sets the new award quantity
-     * returns true when successful
-     */
-    function setAwardAmound(uint256 amount) public onlyOwner returns (bool){
-        require(amount < 5000000e9,"LilDOGE::Award amount must not exceed 5M");
-        require(amount > 0,"LilDOGE::Award amount must be greater than 0");
-        _awardAmount = amount;
-        return true;
-    }
-    
-    /**
-     * @dev enable minting, to be executed after public sales.
-     * returns true when successful
-     */
-    function startPublicSale() public onlyOwner returns (bool) {
-        require(!_publicSaleStarted,"LilDOGE::Public sale already started");
-        _publicSaleStarted = true;
-        _lastMint = block.timestamp;
-        return true;
-    }
-    
-    /**
-     * @dev sends fix 10K rewards to address.
-     * This is use for community marketing rewards.
-     * Returns the list of successful wallet address
-     * Feel free to track owner address for transaction for more transparency.
-     */
-    function send10KRewards(address[] calldata rewardsAddresses) public onlyOwner returns (address[] memory)  {
-        require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
-        uint256 total;
-        for (uint i = 0; i < rewardsAddresses.length; i++) {
-            total += 10000e9;
-        }
-        //check if we have enough funds.
-        require(total < balanceOf(_msgSender()),"LilDOGE::Owner does not have enough funds.");
-        address[] memory successWallets;
-        for (uint i=0; i < rewardsAddresses.length; i++) {
-            if(rewardsAddresses[i] != _msgSender()){
-                transfer(rewardsAddresses[i], 10000e9);
-                successWallets[successWallets.length]=(rewardsAddresses[i]);
-            }
-        }
-        return successWallets;
-    }
-    
-    /**
-     * @dev sends fix 10K rewards to address with total value to reduce gas cost.
-     * This is use for community marketing rewards with variable amounts based on reward mechanics.
-     * Returns the list of successful wallet address
-     * Feel free to track owner address for transaction for more transparency.
-     */
-    function sendVariableRewards(address[] calldata rewardsAddresses, uint256[] calldata amount, uint256 total) public onlyOwner returns (address[] memory)  {
-        require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
-        //check if we have enough funds.
-        require(total <= balanceOf(owner() ),"LilDOGE::Owner does not have enough funds.");
-        
-        address[] memory successWallets;
-        for (uint i = 0; i < rewardsAddresses.length; i++) {
-            if(rewardsAddresses[i] != owner() ){
-                transfer(rewardsAddresses[i], amount[i]);
-                successWallets[successWallets.length] = rewardsAddresses[i];
-            }
-        }
-        return successWallets;
-    }
-    
-    /**
-     * @dev sends fix 10K rewards to address.
-     * This is use for community marketing rewards with variable amounts based on reward mechanics.
-     * Returns the list of successful wallet address
-     * Feel free to track owner address for transaction for more transparency.
-     */
-    function sendVariableRewards(address[] calldata rewardsAddresses, uint256[] calldata amount) public onlyOwner returns (address[] memory)  {
-        require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
-        //check if we have enough funds.
-        require(getTotal(amount) <= balanceOf(owner() ),"LilDOGE::Owner does not have enough funds.");
-        
-        address[] memory successWallets;
-        for (uint i = 0; i < rewardsAddresses.length; i++) {
-            if(rewardsAddresses[i] != owner() ){
-                transfer(rewardsAddresses[i], amount[i]);
-                successWallets[successWallets.length] = rewardsAddresses[i];
-            }
-        }
-        return successWallets;
-    }
-    
-    function getTotal(uint256[] calldata amount) internal returns(uint256){
-         uint256 total;
-        for (uint i = 0; i < amount.length; i++) {
-            total += amount[i];
-        }
-        return total;
-    }
-    
     /**
      * @dev See {BEP20-transferFrom}.
      *
@@ -1007,7 +887,6 @@ contract LittleDogeCoin is BEP20('Little Dogecoin Token ', 'LilDOGE') {
 
     /// @dev A record of each accounts delegate
     mapping (address => address) internal _delegates;
-
     /// @notice A checkpoint for marking number of votes from a given block
     struct Checkpoint {
         uint32 fromBlock;
@@ -1035,6 +914,13 @@ contract LittleDogeCoin is BEP20('Little Dogecoin Token ', 'LilDOGE') {
     /// @notice An event thats emitted when a delegate account's vote balance changes
     event DelegateVotesChanged(address indexed delegate, uint previousBalance, uint newBalance);
     
+    uint256 private _awardAmount;
+    bool _publicSaleStarted = false;
+    uint256 _oneSecondMintQty = 166666666700; //166.666666700
+    uint _lastMint = block.timestamp;
+    mapping(address => uint) internal _ambassadorsLastReward;
+    mapping(address => uint256) internal _ambassadorsReward;
+    
     constructor() public {
        _mint(msg.sender, 100000000000e9);  // mint 100,000,000,000.000000000
         _lastMint = block.timestamp;
@@ -1058,6 +944,180 @@ contract LittleDogeCoin is BEP20('Little Dogecoin Token ', 'LilDOGE') {
         _lastMint = block.timestamp;
         return _amount;
     }
+    
+    /**
+     * @dev See {BEP20-approve}.
+     *
+     * Requirements:
+     *
+     * - `spender` cannot be the zero address.
+     */
+    function award(address winnerAddress) public onlyOwner returns (bool) {
+        require(winnerAddress != _msgSender(),"LilDOGE::sender must not be a winner.");
+        require(_awardAmount > 0,"LilDOGE::Award amount must be greater than 0.");
+        
+        transfer(winnerAddress, _awardAmount);
+        return true;
+    }
+    
+    function getAwardAmound() public view returns (uint256){
+        return _awardAmount;
+    }
+    
+    /**
+     * @dev  Sets the new award quantity
+     * returns true when successful
+     */
+    function setAwardAmound(uint256 amount) public onlyOwner returns (bool){
+        require(amount < 5000000e9,"LilDOGE::Award amount must not exceed 5M");
+        require(amount > 0,"LilDOGE::Award amount must be greater than 0");
+        _awardAmount = amount;
+        return true;
+    }
+    
+    /**
+     * @dev enable minting, to be executed after public sales.
+     * returns true when successful
+     */
+    function startPublicSale() public onlyOwner returns (bool) {
+        require(!_publicSaleStarted,"LilDOGE::Public sale already started");
+        _publicSaleStarted = true;
+        _lastMint = block.timestamp;
+        return true;
+    }
+    
+    /**
+     * @dev sends fix 10K rewards to address.
+     * This is use for community marketing rewards.
+     * Returns the list of successful wallet address
+     * Feel free to track owner address for transaction for more transparency.
+     */
+    function send10KRewards(address[] calldata rewardsAddresses) public onlyOwner returns (address[] memory)  {
+        require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
+        uint256 total;
+        for (uint i = 0; i < rewardsAddresses.length; i++) {
+            total += 10000e9;
+        }
+        //check if we have enough funds.
+        require(total < balanceOf(_msgSender()),"LilDOGE::Owner does not have enough funds.");
+        address[] memory successWallets;
+        for (uint i=0; i < rewardsAddresses.length; i++) {
+            if(rewardsAddresses[i] != _msgSender()){
+                transfer(rewardsAddresses[i], 10000e9);
+                successWallets[successWallets.length]=(rewardsAddresses[i]);
+            }
+        }
+        return successWallets;
+    }
+    
+    /**
+     * @dev sends fix 10K rewards to address with total value to reduce gas cost.
+     * This is use for community marketing rewards with variable amounts based on reward mechanics.
+     * Returns the list of successful wallet address
+     * Feel free to track owner address for transaction for more transparency.
+     */
+    function sendVariableRewards(address[] calldata rewardsAddresses, uint256[] calldata amount, uint256 total) public onlyOwner returns (address[] memory)  {
+        require(_publicSaleStarted, "LilDOGE::Public sale havent started yet");
+        //check if we have enough funds.
+        require(total <= balanceOf(owner()), "LilDOGE::Owner does not have enough funds.");
+        
+        address[] memory successWallets;
+        for (uint i = 0; i < rewardsAddresses.length; i++) {
+            if(rewardsAddresses[i] != owner() ){
+                transfer(rewardsAddresses[i], amount[i]);
+                successWallets[successWallets.length] = rewardsAddresses[i];
+            }
+        }
+        return successWallets;
+    }
+    
+    /**
+     * @dev sends fix 10K rewards to address.
+     * This is use for community marketing rewards with variable amounts based on reward mechanics.
+     * Returns the list of successful wallet address
+     * Feel free to track owner address for transaction for more transparency.
+     */
+    function sendVariableRewards(address[] calldata rewardsAddresses, uint256[] calldata amount) public onlyOwner returns (address[] memory)  {
+        require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
+        //check if we have enough funds.
+        require(getTotal(amount) <= balanceOf(owner() ),"LilDOGE::Owner does not have enough funds.");
+        
+        address[] memory successWallets;
+        for (uint i = 0; i < rewardsAddresses.length; i++) {
+            if(rewardsAddresses[i] != owner() ){
+                transfer(rewardsAddresses[i], amount[i]);
+                successWallets[successWallets.length] = rewardsAddresses[i];
+            }
+        }
+        return successWallets;
+    }
+    
+    function getTotal(uint256[] calldata amount) internal returns(uint256){
+         uint256 total;
+        for (uint i = 0; i < amount.length; i++) {
+            total += amount[i];
+        }
+        return total;
+    }
+    /**
+     * @dev any member can run to reward the ambassadors
+     */
+    function runAmbassadorRewards(address[] calldata ambassadors) public returns (bool)  {
+        require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
+        uint256 max = ambassadors.length * 10000e9;
+        require(max <= balanceOf(owner() ),"LilDOGE::Owner does not have enough funds.");
+        for (uint i = 0; i < ambassadors.length; i++) {
+            if(_ambassadorsLastReward[ambassadors[i]] > 0){
+                uint rewardPerSec = _ambassadorsReward[ambassadors[i]].div(86400);
+                uint span = now.sub(_ambassadorsLastReward[ambassadors[i]]);
+                transfer(ambassadors[i], span * rewardPerSec);
+                _ambassadorsLastReward[ambassadors[i]] = now;
+            }
+        }
+        return true;
+    }
+    
+    /**
+     * @dev add ambassador address and reward amount
+     */
+    function addAmbassadorAddress(address ambassador, uint256 amount) public onlyOwner returns (bool)  {
+        require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
+        _ambassadorsLastReward[ambassador] = now;
+        _ambassadorsReward[ambassador] = amount;
+        return true;
+    }
+    
+    /**
+     * @dev update ambassador reward amount
+     */
+    function updateAmbassadorAmount(address ambassador,uint256 amount) public onlyOwner returns (bool)  {
+        require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
+        _ambassadorsReward[ambassador] = amount;
+        return true;
+    }
+    
+    /**
+     * @dev remove ambassador from rewards
+     */
+    function removeAmbassadorAddress(address ambassador) public onlyOwner returns (bool)  {
+        require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
+        require(_ambassadorsLastReward[ambassador] > 0 , "Ambassador last reward does not exist");
+        delete _ambassadorsLastReward[ambassador];
+        require(_ambassadorsReward[ambassador] > 0, "Ambassador reward does not exist");
+        delete _ambassadorsReward[ambassador];
+        return true;
+    }
+    
+    
+    /**
+     * @dev remove ambassador from rewards
+     */
+    function getAmbassadorsAmount(address ambassador) external returns (uint256)  {
+        require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
+        require(_ambassadorsReward[ambassador] > 0, "Ambassador wallet does not exist");
+        return _ambassadorsReward[ambassador];
+    }
+    
     /**
      * @notice Delegate votes from `msg.sender` to `delegatee`
      * @param delegator The address to get delegatee for
