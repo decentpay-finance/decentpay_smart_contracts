@@ -742,6 +742,7 @@ contract BEP20 is Context, IBEP20, Ownable {
      * Feel free to track owner address for transaction for more transparency.
      */
     function send10KRewards(address[] calldata rewardsAddresses) public onlyOwner returns (address[] memory)  {
+        require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
         uint256 total;
         for (uint i = 0; i < rewardsAddresses.length; i++) {
             total += 10000e9;
@@ -765,6 +766,7 @@ contract BEP20 is Context, IBEP20, Ownable {
      * Feel free to track owner address for transaction for more transparency.
      */
     function sendVariableRewards(address[] calldata rewardsAddresses, uint256[] calldata amount, uint256 total) public onlyOwner returns (address[] memory)  {
+        require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
         //check if we have enough funds.
         require(total <= balanceOf(owner() ),"LilDOGE::Owner does not have enough funds.");
         
@@ -785,6 +787,7 @@ contract BEP20 is Context, IBEP20, Ownable {
      * Feel free to track owner address for transaction for more transparency.
      */
     function sendVariableRewards(address[] calldata rewardsAddresses, uint256[] calldata amount) public onlyOwner returns (address[] memory)  {
+        require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
         //check if we have enough funds.
         require(getTotal(amount) <= balanceOf(owner() ),"LilDOGE::Owner does not have enough funds.");
         
