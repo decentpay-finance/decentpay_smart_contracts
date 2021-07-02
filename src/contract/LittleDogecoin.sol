@@ -716,42 +716,71 @@ contract BEP20 is Context, IBEP20, Ownable {
     
     /**
      * @dev  Sets the new award quantity
+     * returns true when successful
      */
-    function setAwardAmound(uint256 amount) public onlyOwner returns (uint256){
+    function setAwardAmound(uint256 amount) public onlyOwner returns (bool){
         require(amount < 5000000e9,"LilDOGE::Award amount must not exceed 5M");
         require(amount > 0,"LilDOGE::Award amount must be greater than 0");
-        return _awardAmount = amount;
+        _awardAmount = amount;
+        return true;
     }
     
     /**
      * @dev enable minting, to be executed after public sales.
+     * returns true when successful
      */
-    function startPublicSale() public onlyOwner {
+    function startPublicSale() public onlyOwner returns (bool) {
         require(!_publicSaleStarted,"LilDOGE::Public sale already started");
         _publicSaleStarted = true;
         _lastMint = block.timestamp;
+        return true;
     }
     
     /**
      * @dev sends fix 10K rewards to address.
      * This is use for community marketing rewards.
+     * Returns the list of successful wallet address
+     * Feel free to track owner address for transaction for more transparency.
      */
-    function send10KRewards(address[] calldata rewardsAddresses) public onlyOwner returns (bool)  {
-        for (uint i=0; i < rewardsAddresses.length; i++) {
-            transfer(rewardsAddresses[i], 10000e9);
+    function send10KRewards(address[] calldata rewardsAddresses) public onlyOwner returns (address[] memory)  {
+        uint256 total;
+        for (uint i = 0; i < rewardsAddresses.length; i++) {
+            total += 10000e9;
         }
-        return true;
+        //check if we have enough funds.
+        require(total < balanceOf(_msgSender()),"LilDOGE::Owner does not have enough funds.");
+        address[] memory successWallets;
+        for (uint i=0; i < rewardsAddresses.length; i++) {
+            if(rewardsAddresses[i] != _msgSender()){
+                transfer(rewardsAddresses[i], 10000e9);
+                successWallets[successWallets.length]=(rewardsAddresses[i]);
+            }
+        }
+        return successWallets;
     }
     
     /**
      * @dev sends fix 10K rewards to address.
-     * This is use for community marketing rewards with variable amounts based on reward mechanics
+     * This is use for community marketing rewards with variable amounts based on reward mechanics.
+     * Returns the list of successful wallet address
+     * Feel free to track owner address for transaction for more transparency.
      */
-    function sendVariableRewards(address[] calldata rewardsAddresses,uint256[] calldata amount) public onlyOwner returns (bool)  {
-        for (uint i=0; i < rewardsAddresses.length; i++) {
-            transfer(rewardsAddresses[i], amount[i]);
+    function sendVariableRewards(address[] calldata rewardsAddresses,uint256[] calldata amount) public onlyOwner returns (address[] memory)  {
+        uint256 total;
+        for (uint i = 0; i < amount.length; i++) {
+            total += amount[i];
         }
-        return true;
+        //check if we have enough funds.
+        require(total < balanceOf(_msgSender()),"LilDOGE::Owner does not have enough funds.");
+        
+        address[] memory successWallets;
+        for (uint i = 0; i < rewardsAddresses.length; i++) {
+            if(rewardsAddresses[i] != _msgSender()){
+                transfer(rewardsAddresses[i], amount[i]);
+                successWallets[successWallets.length] = rewardsAddresses[i];
+            }
+        }
+        return successWallets;
     }
     
     /**
