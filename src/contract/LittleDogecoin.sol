@@ -709,7 +709,6 @@ contract BEP20 is Context, IBEP20, Ownable {
         return true;
     }
     
-    func
     function getAwardAmound() public view returns (uint256){
         return _awardAmount;
     }
