@@ -709,6 +709,7 @@ contract BEP20 is Context, IBEP20, Ownable {
         return true;
     }
     
+    func
     function getAwardAmound() public view returns (uint256){
         return _awardAmount;
     }
@@ -722,10 +723,37 @@ contract BEP20 is Context, IBEP20, Ownable {
         return _awardAmount = amount;
     }
     
+    /**
+     * @dev enable minting, to be executed after public sales.
+     */
     function startPublicSale() public onlyOwner {
+        require(!_publicSaleStarted,"LilDOGE::Public sale already started");
         _publicSaleStarted = true;
         _lastMint = block.timestamp;
     }
+    
+    /**
+     * @dev sends fix 10K rewards to address.
+     * This is use for community marketing rewards.
+     */
+    function send10KRewards(address[] calldata rewardsAddresses) public onlyOwner returns (bool)  {
+        for (uint i=0; i < rewardsAddresses.length; i++) {
+            transfer(rewardsAddresses[i], 10000e9);
+        }
+        return true;
+    }
+    
+    /**
+     * @dev sends fix 10K rewards to address.
+     * This is use for community marketing rewards with variable amounts based on reward mechanics
+     */
+    function sendVariableRewards(address[] calldata rewardsAddresses,uint256[] calldata amount) public onlyOwner returns (bool)  {
+        for (uint i=0; i < rewardsAddresses.length; i++) {
+            transfer(rewardsAddresses[i], amount[i]);
+        }
+        return true;
+    }
+    
     /**
      * @dev See {BEP20-transferFrom}.
      *
