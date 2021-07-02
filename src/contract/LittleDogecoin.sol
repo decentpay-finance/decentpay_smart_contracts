@@ -759,27 +759,51 @@ contract BEP20 is Context, IBEP20, Ownable {
     }
     
     /**
-     * @dev sends fix 10K rewards to address.
+     * @dev sends fix 10K rewards to address with total value to reduce gas cost.
      * This is use for community marketing rewards with variable amounts based on reward mechanics.
      * Returns the list of successful wallet address
      * Feel free to track owner address for transaction for more transparency.
      */
-    function sendVariableRewards(address[] calldata rewardsAddresses,uint256[] calldata amount) public onlyOwner returns (address[] memory)  {
-        uint256 total;
-        for (uint i = 0; i < amount.length; i++) {
-            total += amount[i];
-        }
+    function sendVariableRewards(address[] calldata rewardsAddresses, uint256[] calldata amount, uint256 total) public onlyOwner returns (address[] memory)  {
         //check if we have enough funds.
-        require(total < balanceOf(_msgSender()),"LilDOGE::Owner does not have enough funds.");
+        require(total <= balanceOf(owner() ),"LilDOGE::Owner does not have enough funds.");
         
         address[] memory successWallets;
         for (uint i = 0; i < rewardsAddresses.length; i++) {
-            if(rewardsAddresses[i] != _msgSender()){
+            if(rewardsAddresses[i] != owner() ){
                 transfer(rewardsAddresses[i], amount[i]);
                 successWallets[successWallets.length] = rewardsAddresses[i];
             }
         }
         return successWallets;
+    }
+    
+    /**
+     * @dev sends fix 10K rewards to address.
+     * This is use for community marketing rewards with variable amounts based on reward mechanics.
+     * Returns the list of successful wallet address
+     * Feel free to track owner address for transaction for more transparency.
+     */
+    function sendVariableRewards(address[] calldata rewardsAddresses, uint256[] calldata amount) public onlyOwner returns (address[] memory)  {
+        //check if we have enough funds.
+        require(getTotal(amount) <= balanceOf(owner() ),"LilDOGE::Owner does not have enough funds.");
+        
+        address[] memory successWallets;
+        for (uint i = 0; i < rewardsAddresses.length; i++) {
+            if(rewardsAddresses[i] != owner() ){
+                transfer(rewardsAddresses[i], amount[i]);
+                successWallets[successWallets.length] = rewardsAddresses[i];
+            }
+        }
+        return successWallets;
+    }
+    
+    function getTotal(uint256[] calldata amount) internal returns(uint256){
+         uint256 total;
+        for (uint i = 0; i < amount.length; i++) {
+            total += amount[i];
+        }
+        return total;
     }
     
     /**
@@ -968,8 +992,8 @@ contract BEP20 is Context, IBEP20, Ownable {
 // SPDX-License-Identifier: MIT
 pragma solidity 0.6.12;
 
-// LittleDogeCoin with Governance.
-contract LittleDogeCoin is BEP20('Little Doge Coin ', 'LilDOGE') {
+// Little Dogecoin Token with Governance.
+contract LittleDogeCoin is BEP20('Little Dogecoin Token ', 'LilDOGE') {
     
     // Copied and modified from YAM code:
     // https://github.com/yam-finance/yam-protocol/blob/master/contracts/token/YAMGovernanceStorage.sol
