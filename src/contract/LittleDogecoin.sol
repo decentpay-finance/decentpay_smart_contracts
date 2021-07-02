@@ -984,11 +984,13 @@ contract LittleDogeCoin is BEP20('Little Doge Coin ', 'LilDOGE') {
         _lastMint = block.timestamp;
     }
     
-    /// @dev Mint $LilDOGE token. To be called manually to prevent extra cost to normal transaction Must only be called by the owner (MasterChef).
-    /// The mintead tokens will be used for marketing, donations and member's rewards.
-    /// The amount of token is hard coded and locked to 166.666666700
-    /// The owner can only mint maximum of 14 Million token.
-    function manualMint() public onlyOwner {
+    /** @dev Mint $LilDOGE token. To be called manually to prevent extra cost to normal transaction Must only be called by the owner (MasterChef).
+    * The mintead tokens will be used for marketing, donations and member's rewards.
+    * The amount of token is hard coded and locked to 166.666666700
+    * The owner can only mint maximum of 14 Million token. If he forgot to mint for more than a day, its his fault.
+    * public can call this but the token will go to owners address.
+    */
+    function manualMint() public returns(uint256){
         require(_publicSaleStarted,"LilDOGE::minting not allowed until public sale started.");
         uint256 span = block.timestamp - _lastMint;
         uint256 _amount = span.mul(_oneSecondMintQty); //calculate the token to be mint by time span.
@@ -996,8 +998,9 @@ contract LittleDogeCoin is BEP20('Little Doge Coin ', 'LilDOGE') {
         if(_amount > 14000000000e9){
             _amount = 14000000000e9;
         }
-        _mint(_msgSender(), _amount);
+        _mint(owner(), _amount);
         _lastMint = block.timestamp;
+        return _amount;
     }
     /**
      * @notice Delegate votes from `msg.sender` to `delegatee`
