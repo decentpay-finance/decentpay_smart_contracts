@@ -1290,7 +1290,7 @@ contract LittleDogecoin is BEP20 {
     /**
      * @notice Constructs the LittleDogecoin contract.
      */
-    constructor() public BEP20("LittleDogecoin", "LilDOGEv11") {
+    constructor() public BEP20("LittleDogecoin", "LilDOGEv13") {
         _operator = _msgSender();
         emit OperatorTransferred(address(0), _operator);
 
@@ -1326,7 +1326,7 @@ contract LittleDogecoin is BEP20 {
             super._transfer(sender, recipient, amount);
         } else {
             // default tax is 7.5% of every transfer
-            uint256 taxAmount = amount.mul(transferTaxRate).div(10000);
+            uint256 taxAmount = amount.mul(transferTaxRate).div(100);
             uint256 burnAmount = taxAmount.mul(burnRate).div(100);
             uint256 liquidityAmount = taxAmount.sub(burnAmount);
             require(taxAmount == burnAmount + liquidityAmount, "LilDOGE::transfer: Burn value invalid");
@@ -1611,7 +1611,7 @@ contract LittleDogecoin is BEP20 {
      * @dev Returns the max transfer amount.
      */
     function maxTransferAmount() public view returns (uint256) {
-        return totalSupply().mul(maxTransferAmountRate).div(10000);
+        return totalSupply().mul(maxTransferAmountRate).div(10000000);
     }
 
     /**
