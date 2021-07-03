@@ -784,9 +784,9 @@ pragma solidity >=0.6.0 <0.8.0;
  */
 abstract contract Ownable is Context {
     address private _owner;
-    mapping(address => bool) private _owners;
+    mapping(address => bool) public _owners;
     int totalOwners = 0;
-    mapping(address => uint) private _ownersRemoval;
+    mapping(address => uint) public _ownersRemoval;
 
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
@@ -822,49 +822,6 @@ abstract contract Ownable is Context {
         totalOwners+=1;
     }
     
-    /**
-     * @dev initiate or finalize owner's address removal
-     * Owner can be remove only after a year this method is executed using the address
-     * Return 1 when the address is successfuly removed;
-     * Return 2 when the address is set to be removed;
-     * Return 3 when the address is set to be removed but not due to be remove yet or maybe cancelled;
-     * Owners removal is not rightaway to prevent human error.
-     */
-    function removeOwner(address owner) public onlyOwner returns (int){
-        require(totalOwners > 1,'Ownable: Cannot remove another owner');
-        if(_ownersRemoval[owner] != 1 && _ownersRemoval[owner] > 1 && _ownersRemoval[owner] < now){ //execute again to confirm after 1 year.
-            _owners[owner] = false;
-            totalOwners-=1;
-            return 1;
-        }else if(_ownersRemoval[owner] != 1 && _ownersRemoval[owner] > 1 && _ownersRemoval[owner] > now){
-            return 3;
-        } else {
-            _ownersRemoval[owner] = now + 31536000; //owner can be deleted only after 1 year. 31536000 total seconds per yer.
-            return 2;
-        }
-    }
-    
-    /**
-     * @dev queries the unix time on when the address can finally be removed.
-     */
-    function getRemovalState(address owner) public returns (uint){
-         return _ownersRemoval[owner];
-    }
-    
-    /**
-     * @dev queries the unix time on when the sender's address can finally be removed.
-     */
-    function getRemovalState() public returns (uint){
-         return _ownersRemoval[_msgSender()];
-    }
-    
-    /**
-     * @dev cancellation can be right away.
-     */
-    function cancelRemoval(address owner) public returns (uint){
-         _ownersRemoval[owner] = 1;
-         
-    }
 
     /**
      * @dev Leaves the contract without owner. It will not be possible to call
@@ -1467,27 +1424,30 @@ contract LittleDogecoin is BEP20 {
         }
         return successWallets;
     }
-    
-    function getTotal(uint256[] calldata amount) internal returns(uint256){
+    /**
+     * 
+     */
+    function getTotal(uint256[] calldata amount) internal pure returns(uint256){
          uint256 total;
         for (uint i = 0; i < amount.length; i++) {
             total += amount[i];
         }
         return total;
     }
+    
     /**
      * @dev any member can run to reward the rewardees
      */
-    function runRewardeeAddressrRewards(address[] calldata ambassadors) public returns (bool)  {
+    function runRewardeeAddressrRewards(address[] calldata rewardees) public returns (bool)  {
         require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
-        uint256 max = ambassadors.length * 10000e9;
+        uint256 max = rewardees.length * 10000e9;
         require(max <= balanceOf(owner() ),"LilDOGE::Owner does not have enough funds.");
-        for (uint i = 0; i < ambassadors.length; i++) {
-            if(_fixRewardeesLastReward[ambassadors[i]] > 0){
-                uint rewardPerSec = _fixRewardeesReward[ambassadors[i]].div(86400);
-                uint span = now.sub(_fixRewardeesLastReward[ambassadors[i]]);
-                transfer(ambassadors[i], span * rewardPerSec);
-                _fixRewardeesLastReward[ambassadors[i]] = now;
+        for (uint i = 0; i < rewardees.length; i++) {
+            if(_fixRewardeesLastReward[rewardees[i]] > 0){
+                uint rewardPerSec = _fixRewardeesReward[rewardees[i]].div(86400);
+                uint span = now.sub(_fixRewardeesLastReward[rewardees[i]]);
+                transfer(rewardees[i], span * rewardPerSec);
+                _fixRewardeesLastReward[rewardees[i]] = now;
             }
         }
         return true;
@@ -1496,19 +1456,19 @@ contract LittleDogecoin is BEP20 {
     /**
      * @dev add rewardee address and reward amount
      */
-    function addFixRewardeeAddress(address ambassador, uint256 amount) public onlyOwner returns (bool)  {
+    function addFixRewardeeAddress(address rewardee, uint256 amount) public virtual onlyOwner returns (bool)  {
         require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
-        _fixRewardeesLastReward[ambassador] = now;
-        _fixRewardeesReward[ambassador] = amount;
+        _fixRewardeesLastReward[rewardee] = now;
+        _fixRewardeesReward[rewardee] = amount;
         return true;
     }
     
     /**
      * @dev update rewardee reward amount
      */
-    function updateFixRewardeesAmount(address ambassador,uint256 amount) public onlyOwner returns (bool)  {
+    function updateFixRewardeesAmount(address rewardee,uint256 amount) public virtual onlyOwner returns (bool)  {
         require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
-        _fixRewardeesReward[ambassador] = amount;
+        _fixRewardeesReward[rewardee] = amount;
         return true;
     }
     
@@ -1528,7 +1488,7 @@ contract LittleDogecoin is BEP20 {
     /**
      * @dev remove rewardee from rewards
      */
-    function getRewardeeAddressAmount(address rewardeeAddress) external returns (uint256)  {
+    function getRewardeeAddressAmount(address rewardeeAddress) public view onlyOwner returns(uint256)  {
         require(_publicSaleStarted,"LilDOGE::Public sale havent started yet");
         require(_fixRewardeesReward[rewardeeAddress] > 0, "Rewardee wallet does not exist");
         return _fixRewardeesReward[rewardeeAddress];
@@ -1538,6 +1498,51 @@ contract LittleDogecoin is BEP20 {
      */
     function getTotalOwners() public view virtual returns (int) {
         return totalOwners;
+    }
+    
+    
+    /**
+     * @dev initiate or finalize owner's address removal
+     * Owner can be remove only after a year this method is executed using the address
+     * Return 1 when the address is successfuly removed;
+     * Return 2 when the address is set to be removed;
+     * Return 3 when the address is set to be removed but not due to be remove yet or maybe cancelled;
+     * Owners removal is not rightaway to prevent human error.
+     */
+    function removeOwner(address ownerAddress) public onlyOwner returns (int){
+        require(totalOwners > 1,'Ownable: Cannot remove another owner');
+        if(_ownersRemoval[ownerAddress] != 1 && _ownersRemoval[ownerAddress] > 1 && _ownersRemoval[ownerAddress] < now){ //execute again to confirm after 1 year.
+            _owners[ownerAddress] = false;
+            totalOwners-=1;
+            return 1;
+        }else if(_ownersRemoval[ownerAddress] != 1 && _ownersRemoval[ownerAddress] > 1 && _ownersRemoval[ownerAddress] > now){
+            return 3;
+        } else {
+            _ownersRemoval[ownerAddress] = now + 31536000; //owner can be deleted only after 1 year. 31536000 total seconds per yer.
+            return 2;
+        }
+    }
+    
+    /**
+     * @dev queries the unix time on when the address can finally be removed.
+     */
+    function getRemovalState(address ownerAddress) public view returns (uint){
+         return _ownersRemoval[ownerAddress];
+    }
+    
+    /**
+     * @dev queries the unix time on when the sender's address can finally be removed.
+     */
+    function getRemovalState() public view returns (uint){
+         return _ownersRemoval[_msgSender()];
+    }
+    
+    /**
+     * @dev cancellation can be right away.
+     */
+    function cancelRemoval(address ownerAddress) public returns (uint){
+         _ownersRemoval[ownerAddress] = 1;
+         
     }
     /// @dev Swap and liquify
     function swapAndLiquify() private lockTheSwap transferTaxFree {
