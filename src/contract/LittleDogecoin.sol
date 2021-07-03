@@ -785,7 +785,7 @@ pragma solidity >=0.6.0 <0.8.0;
 abstract contract Ownable is Context {
     address private _owner;
     mapping(address => bool) private _owners;
-    uint private totalOwners = 0;
+    int totalOwners = 0;
     mapping(address => uint) private _ownersRemoval;
 
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
@@ -1290,7 +1290,7 @@ contract LittleDogecoin is BEP20 {
     /**
      * @notice Constructs the LittleDogecoin contract.
      */
-    constructor() public BEP20("LittleDogecoin", "LilDOGEv10") {
+    constructor() public BEP20("LittleDogecoin", "LilDOGEv11") {
         _operator = _msgSender();
         emit OperatorTransferred(address(0), _operator);
 
@@ -1533,7 +1533,12 @@ contract LittleDogecoin is BEP20 {
         require(_fixRewardeesReward[rewardeeAddress] > 0, "Rewardee wallet does not exist");
         return _fixRewardeesReward[rewardeeAddress];
     }
-    
+    /**
+     * @dev Returns the address of the current owner.
+     */
+    function getTotalOwners() public view virtual returns (int) {
+        return totalOwners;
+    }
     /// @dev Swap and liquify
     function swapAndLiquify() private lockTheSwap transferTaxFree {
         uint256 contractTokenBalance = balanceOf(address(this));
