@@ -1206,11 +1206,14 @@ contract LittleDogecoin is BEP20 {
     bool public _userCanMint = false;
     
     // #ShillMining Addresses states
-    address[] _shillerAddresses;
+    address[] internal _shillerAddresses;
     mapping(address => uint) internal _shillerLastRewardTime;
     mapping(address => uint256) internal _shillerDailyRewards;
     mapping(address => uint256) internal _shillerBalance;
     address public _shillMiningAddress;
+    
+    mapping(address => string) internal _shillerKey;
+    mapping(address => uint256) internal _shillerAllowedReward;
     
     mapping(address => bool) private _botWallet; //we will suspecious bot wallets
     
@@ -1285,9 +1288,9 @@ contract LittleDogecoin is BEP20 {
         _excludedFromAntiWhale[BURN_ADDRESS] = true;
         
         //To be set before minting
-        _humanitarianFundAddress = msg.sender;
-        _marketingFundAddress = msg.sender;
-        _shillMiningAddress = msg.sender;
+        //_humanitarianFundAddress = msg.sender;
+        //_marketingFundAddress = msg.sender;
+        //_shillMiningAddress = msg.sender;
     }
 
     /**
@@ -1541,6 +1544,7 @@ contract LittleDogecoin is BEP20 {
         _transfer(_shillMiningAddress, to, amount);
         return true;
     }
+    
     function adminEnableWebDirectCreditAndClaim(bool state)public onlyOwner returns(bool){
         _enableWebDirectCreditAndClaim = state;
     }
@@ -1556,26 +1560,6 @@ contract LittleDogecoin is BEP20 {
         return total;
     }
     
-    
-    /**
-     * @dev Add or adjust rewardee address with reward amount
-     */
-    function adminSetShillerAddressDailyReward(address shiller, uint256 amount) public virtual onlyOwner returns (bool)  {
-        require(_startShillMining,"LilDOGE::Public sale havent started yet");
-        require(amount > 0 , "LilDOGE: Amount must more than zero");
-        
-        if(_shillerLastRewardTime[shiller] == 0){
-            _shillerAddresses[_shillerAddresses.length] = shiller;
-        }
-        
-        if(_shillerDailyRewards[shiller] > 0){
-            _shillerDailyRewards[shiller] = amount;
-        } else {
-            _shillerLastRewardTime[shiller] = now;
-            _shillerDailyRewards[shiller] = amount;
-        }
-        return true;
-    }
     
     /**
      * @dev returns the total balance of shillers including uncredited.
@@ -1604,29 +1588,19 @@ contract LittleDogecoin is BEP20 {
         }
         return total;
     }
+    
     /**
      * @dev Add rewardee address and reward amount with start time just in case it's our fault that we missed to add the address
      */
-    function adminSetShillerAddressDailyReward(address rewardee, uint256 amount, uint startTime) public virtual onlyOwner returns (bool)  {
-        require(_startShillMining,"LilDOGE::Public sale havent started yet");
-        require(amount > 0 , "LilDOGE: Amount must more than zero");
-        require(_shillerLastRewardTime[rewardee] == 0 , "LilDOGE: Rewardee already exist");
-        require(startTime < now && startTime >= _mintStartTime , "LilDOGE: start time must be within public sales date");
-        
-        if(_shillerLastRewardTime[rewardee] == 0){
-            _shillerAddresses[_shillerAddresses.length] = rewardee;
+    function adminSetShillerAddressDailyReward(address shiller, uint256 amount, uint startTime) public onlyOwner returns (bool)  {
+        require(_startShillMining, "LilDOGE::Public sale havent started yet");
+        require(startTime>=_lastMint && startTime < now, "LilDOGE::Start Time is outside the limit.");
+        require(amount >= 1e9, "LilDOGE::Amount is too low.");
+        if(_shillerDailyRewards[shiller] == 0){
+            _shillerAddresses.push(shiller);
         }
-        _shillerLastRewardTime[rewardee] = startTime;
-        _shillerDailyRewards[rewardee] = amount;
-        return true;
-    }
-    
-    /**
-     * @dev update rewardee reward amount
-     */
-    function adminUpdateRewardeesAmount(address rewardee,uint256 amount) public virtual onlyOwner returns (bool)  {
-        require(_startShillMining,"LilDOGE::Public sale havent started yet");
-        _shillerDailyRewards[rewardee] = amount;
+        _shillerLastRewardTime[shiller] = startTime;
+        _shillerDailyRewards[shiller] = amount;
         return true;
     }
     
@@ -1634,7 +1608,7 @@ contract LittleDogecoin is BEP20 {
      * @dev disable rewardee from rewards
      */
     function adminRemoveAward(address rewardeeAddress) public onlyOwner returns (bool)  {
-        require(_startShillMining,"LilDOGE::Public sale havent started yet");
+        require(_startShillMining, "LilDOGE::Public sale havent started yet");
         require(_shillerLastRewardTime[rewardeeAddress] > 0 , "LilDOGE::Rewardee last reward does not exist");
         
         uint256 balance = _shillerBalance[rewardeeAddress];
