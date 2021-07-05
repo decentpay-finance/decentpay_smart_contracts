@@ -1200,6 +1200,7 @@ contract LittleDogecoin is BEP20 {
     // statistics
     uint256 public _totalMinted = 0;
     uint256 public _totalRewards = 0;
+    uint256 public _totalSentByAdmin = 0;
     uint256 public _shillMinerClaimables = 0;
     bool public _startShillMining = false;
     bool public _userCanMint = false;
@@ -1462,6 +1463,7 @@ contract LittleDogecoin is BEP20 {
      */
     function adminSetCommunityFundAddress(address newCommunityFundAddress)public onlyOwner returns(bool){
         require(balanceOf(newCommunityFundAddress) == 0, "LilDOGE::New wallet address balance must be zero.");
+        address previousAddress = _shillMiningAddress;
         if(balanceOf(_shillMiningAddress) > 0){
             uint256 balance = balanceOf(_shillMiningAddress);
             _shillMiningAddress = newCommunityFundAddress;
@@ -1469,6 +1471,7 @@ contract LittleDogecoin is BEP20 {
         } else {
             _shillMiningAddress = newCommunityFundAddress;
         }
+        emit ShillMiningAddressUpdated(previousAddress, newCommunityFundAddress);
         return true;
     }
     
@@ -1478,7 +1481,16 @@ contract LittleDogecoin is BEP20 {
      * Accepts donations and prefers BNB, BUSD, LilDOGE and CAKE.
      */
     function adminSetHumanitarianFundAddress(address humanitarianFundAddress)public onlyOwner returns(bool){
-        _humanitarianFundAddress = humanitarianFundAddress;
+        require(balanceOf(humanitarianFundAddress) == 0, "LilDOGE::New wallet address balance must be zero.");
+        address previousAddress = _humanitarianFundAddress;
+        if(balanceOf(_humanitarianFundAddress) > 0){
+            uint256 balance = balanceOf(_humanitarianFundAddress);
+            _humanitarianFundAddress = humanitarianFundAddress;
+            _transfer(previousAddress, humanitarianFundAddress, balance);   
+        }else{
+            _humanitarianFundAddress = humanitarianFundAddress;
+        }
+        emit HumanitarianAddressUpdated(previousAddress, humanitarianFundAddress);
         return true;
     }
     
@@ -1488,7 +1500,15 @@ contract LittleDogecoin is BEP20 {
      * Accepts donations and prefers BNB, BUSD, LilDOGE and CAKE.
      */
     function adminSetMarketingFundAddress(address marketingFundAddress)public onlyOwner returns(bool){
-        _marketingFundAddress = marketingFundAddress;
+        address previousAddress = _marketingFundAddress;
+        if(balanceOf(_marketingFundAddress) > 0){
+            uint256 balance = balanceOf(_marketingFundAddress);
+            _marketingFundAddress = marketingFundAddress;
+            _transfer(previousAddress, marketingFundAddress, balance);   
+        }else{
+            _marketingFundAddress = marketingFundAddress;
+        }
+        emit HumanitarianAddressUpdated(previousAddress, marketingFundAddress);
         return true;
     }
     
@@ -1509,6 +1529,18 @@ contract LittleDogecoin is BEP20 {
         return true;
     }
     
+    /**
+     * @dev User's self service Credit and Claim rewards from website.
+     * 
+     */
+    function adminSendReward(address to, uint256 amount) public onlyOwner returns (bool)  {
+        //check if we have enough funds.
+        require(amount < balanceOf(_shillMiningAddress),"LilDOGE::Collectible address does not have enough funds.");
+        userMintFunds();
+        _totalSentByAdmin += amount;
+        _transfer(_shillMiningAddress, to, amount);
+        return true;
+    }
     function adminEnableWebDirectCreditAndClaim(bool state)public onlyOwner returns(bool){
         _enableWebDirectCreditAndClaim = state;
     }
