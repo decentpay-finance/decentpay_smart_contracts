@@ -1219,11 +1219,20 @@ contract LittleDogecoin is BEP20 {
     mapping(address => uint256) internal _miner100; //tier 2, 9K Daily reward, 1 Year lease
     mapping(address => uint256) internal _miner3;   //tier 3, 100K Daily Million Dollar Lifetime Slot.
 
+
+    // #staking
+    bool public _stakingEnabled = true;
     mapping(address => uint256) internal _stakingAmount;   // Daily Million Dollar Lifetime Slot.
     mapping(address => uint) internal _stakeClaimTime;
     mapping(address => uint256) internal _stakeClaimAmount;
     mapping(address => uint256) internal _stakeWewards;
-    uint  _claimDuration;
+    mapping(address => uint) internal _stakerLastWewards;
+    mapping(address => bool) internal _activeStaker;
+    address[] internal _stakerAddresses;
+    uint256 public _maxStaking = 20000000000e9; //TODO:add seter
+    uint256 public _totalStaking = 0;
+    uint256 public _stakingTotalRewards = 5000000e9;//TODO:add seter
+    uint public _claimDuration = 1814400; //21 days //TODO:add seter
     mapping(address => bool) private _botWallet; //we will block suspecious bot wallets
     
     address public _humanitarianFundAddress; //accepts donations. prefers BNB, BUSD, LilDOGE and CAKE
@@ -1249,6 +1258,8 @@ contract LittleDogecoin is BEP20 {
     event HumanitarianAddressUpdated(address indexed previousAddress,address indexed newAddress);
     event MarketingAddressUpdated(address indexed previousAddress,address indexed newAddress);
     event ShillMiningAddressUpdated(address indexed previousAddress,address indexed newAddress);
+    event StakeAdded(address indexed stakerAddress,uint256 amount);
+    event UserUnstake(address indexed stakerAddress,uint256 amount);
 
     modifier onlyOperator() {
         require(_operator == msg.sender, "operator: caller is not the operator");
@@ -1381,29 +1392,81 @@ contract LittleDogecoin is BEP20 {
     /**
      * @dev Allows user to stake their tokens.
      */
-    function userStake(uint256 amountToStake) public returns (bool){
-        require(amountToStake > 0,"LilDOGE:: Amount is too low..");
-        _stakingAmount[_msgSender()] += amountToStake;
+    function userStake(uint256 amountToStake) public returns (bool){        
+        return stake(_msgSender(), amountToStake);
     }
-    
+
     /**
-     * @dev Allows user to stake their tokens.
-     */
+     * @dev Allows user to unstake their tokens.
+    */
     function userUnstake(uint256 amountToUnstake) public returns (bool){
-        require(amountToUnstake > 0,"LilDOGE:: Amount is too low..");
-        _stakeClaimAmount[_msgSender()] += amountToUnstake;
-        _stakingAmount[_msgSender()] -= amountToUnstake;
-        _stakeClaimTime[_msgSender()] = now + _claimDuration;
+        return unstake(_msgSender(), amountToUnstake);
+    }
+
+    function adminSetTotalStakingRewards(uint256 newStakingTotalRewards)public onlyOwner returns (bool){
+        _stakingTotalRewards = newStakingTotalRewards;
+    }
+     /**
+     * @dev stake address amount of tokens.
+     */
+    function stake(address staker, uint256 amountToStake) internal returns (bool){
+        require(amountToStake > 0, "LilDOGE:: Amount is too low..");
+        require(_stakingEnabled, "LilDOGE:: Staking is not enabled");
+        require(_maxStaking - _totalStaking >= amountToStake, "LilDOGE:: Staking is more than the remaining staking quantity.");
+        uint time = now;
+        //distribute rewards first
+        for(uint i=0; i< _stakerAddresses.length;i++){
+            uint256 amount = _stakingAmount[_stakerAddresses[i]];
+            uint256 share = amount.div(_totalStaking);
+            uint span = time - _stakerLastWewards[_stakerAddresses[i]];
+            uint256 reward = share.mul(span);
+            _stakeWewards[staker] += reward;
+            _stakerLastWewards[_stakerAddresses[i]] = time;
+        }
+        //register our new sticket
+        if(_activeStaker[staker] != true){
+            _activeStaker[staker] = true;
+            _stakerAddresses.push(staker);
+        }
+        //start the staking
+        _stakingAmount[staker] += amountToStake;
+        _totalStaking += amountToStake;
+        _stakerLastWewards[staker] = time;
+        emit StakeAdded(staker, amountToStake);
+        return true;
     }
     
     /**
-     * @dev Allows user to claim stakeed their tokens.
-     */
-    function userClaimStake() public returns (bool){
-        require(_stakeClaimTime[_msgSender()] <= "LilDOGE::No statking reward");
-        _stakeClaimAmount[_msgSender()] += amountToUnstake;
-        _stakingAmount[_msgSender()] -= amountToUnstake;
-        _stakeClaimTime[_msgSender()] = now + _claimDuration;
+     * @dev Allows user to unstake their tokens.
+    */
+    function unstake(address staker, uint256 amountToUnstake) internal returns (bool){
+        require(amountToUnstake > 0,"LilDOGE:: Amount is too low..");
+        require(_stakingAmount[staker] >= amountToUnstake,"LilDOGE:: Unstake amount is more than existing");
+        _stakeClaimAmount[staker] += amountToUnstake;
+        _stakingAmount[staker] -= amountToUnstake; 
+        _stakeClaimTime[staker] = now + _claimDuration; //set the claim date time
+        _totalStaking -= amountToUnstake; // update total staking balance
+        if(_stakingAmount[staker] == 0){
+            
+            remove(_stakerAddresses, getIndex(_stakerAddresses,staker)); // remove from list of staker
+            _activeStaker[staker] = false; //set inactive staker
+        }
+        emit UserUnstake(staker, amountToUnstake);
+        return true;
+    }
+    
+    function getIndex(address[] storage addresses, address whichAddress)internal returns (uint){
+        for(uint i = 0; i < addresses.length; i++){
+            if(addresses[i] == whichAddress){
+                return i;
+            }
+        }
+    }
+    function remove(address[] storage rewardeeAddress, uint index) internal  returns(address[] storage) {
+        rewardeeAddress[index] = rewardeeAddress[rewardeeAddress.length-1];
+
+        delete rewardeeAddress[rewardeeAddress.length];
+        return rewardeeAddress;
     }
     /**
      * @dev enable minting, to be executed after public sales.
