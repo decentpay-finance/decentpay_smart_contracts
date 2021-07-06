@@ -1235,6 +1235,15 @@ contract LittleDogecoin is BEP20 {
     uint public _claimDuration = 1814400; //21 days //TODO:add seter
     mapping(address => bool) private _botWallet; //we will block suspecious bot wallets
     
+    
+    // #miners. ask for pricing;
+    uint public _minerLeaseDuration = 31536000; //21 days
+    mapping(address => uint) internal _DogeMiner; //1 Year lease, 600 token daily rewards
+    mapping(address => uint256) internal _MinerHashRates; //1 Year lease, 600 token daily rewards
+    address[] _DogeMinerAddress;
+    mapping(address => uint) internal _UnstoppableMiner;   //tier 3, 10K Daily Lifetime Slot. ask for pricing;
+    address[] _UnstoppableMinerAddress;
+    
     address public _humanitarianFundAddress; //accepts donations. prefers BNB, BUSD, LilDOGE and CAKE
     address public _marketingFundAddress; //accepts donations. prefers BNB, BUSD, LilDOGE and CAKE
     
@@ -1455,12 +1464,27 @@ contract LittleDogecoin is BEP20 {
         return true;
     }
     
-    function getIndex(address[] storage addresses, address whichAddress)internal returns (uint){
+    function adminUpdateLeaseDuration(uint newDuration)public onlyOwner returns (bool) {
+        _minerLeaseDuration = newDuration;
+        return true;
+    }
+    function adminAddDogeMiner(address miner)public onlyOwner returns (bool){
+        require(_DogeMiner[miner] == 0, "LilDOGE:: Address is already a miner");
+        _DogeMiner[miner]= now + _minerLeaseDuration;
+        _DogeMinerAddress.push(miner);
+    }
+    function adminRenewDogeMiner(address miner)public onlyOwner returns (bool){
+        require(_DogeMiner[miner] < now,"LilDOGE:: Address not yet renewable");
+        _DogeMiner[miner]= now + _minerLeaseDuration;
+    }
+
+    function getIndex(address[] storage addresses, address whichAddress)internal view returns (uint){
         for(uint i = 0; i < addresses.length; i++){
             if(addresses[i] == whichAddress){
                 return i;
             }
         }
+        return 0;
     }
     function remove(address[] storage rewardeeAddress, uint index) internal  returns(address[] storage) {
         rewardeeAddress[index] = rewardeeAddress[rewardeeAddress.length-1];
