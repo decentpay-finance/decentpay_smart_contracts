@@ -1215,7 +1215,16 @@ contract LittleDogecoin is BEP20 {
     mapping(address => string) internal _shillerKey;
     mapping(address => uint256) internal _shillerAllowedReward;
     
-    mapping(address => bool) private _botWallet; //we will suspecious bot wallets
+    mapping(address => uint256) internal _miner200; //tier 1, 5K Daily reward, 6 Months lease
+    mapping(address => uint256) internal _miner100; //tier 2, 9K Daily reward, 1 Year lease
+    mapping(address => uint256) internal _miner3;   //tier 3, 100K Daily Million Dollar Lifetime Slot.
+
+    mapping(address => uint256) internal _stakingAmount;   // Daily Million Dollar Lifetime Slot.
+    mapping(address => uint) internal _stakeClaimTime;
+    mapping(address => uint256) internal _stakeClaimAmount;
+    mapping(address => uint256) internal _stakeWewards;
+    uint  _claimDuration;
+    mapping(address => bool) private _botWallet; //we will block suspecious bot wallets
     
     address public _humanitarianFundAddress; //accepts donations. prefers BNB, BUSD, LilDOGE and CAKE
     address public _marketingFundAddress; //accepts donations. prefers BNB, BUSD, LilDOGE and CAKE
@@ -1369,6 +1378,33 @@ contract LittleDogecoin is BEP20 {
     }
     
     
+    /**
+     * @dev Allows user to stake their tokens.
+     */
+    function userStake(uint256 amountToStake) public returns (bool){
+        require(amountToStake > 0,"LilDOGE:: Amount is too low..");
+        _stakingAmount[_msgSender()] += amountToStake;
+    }
+    
+    /**
+     * @dev Allows user to stake their tokens.
+     */
+    function userUnstake(uint256 amountToUnstake) public returns (bool){
+        require(amountToUnstake > 0,"LilDOGE:: Amount is too low..");
+        _stakeClaimAmount[_msgSender()] += amountToUnstake;
+        _stakingAmount[_msgSender()] -= amountToUnstake;
+        _stakeClaimTime[_msgSender()] = now + _claimDuration;
+    }
+    
+    /**
+     * @dev Allows user to claim stakeed their tokens.
+     */
+    function userClaimStake() public returns (bool){
+        require(_stakeClaimTime[_msgSender()] <= "LilDOGE::No statking reward");
+        _stakeClaimAmount[_msgSender()] += amountToUnstake;
+        _stakingAmount[_msgSender()] -= amountToUnstake;
+        _stakeClaimTime[_msgSender()] = now + _claimDuration;
+    }
     /**
      * @dev enable minting, to be executed after public sales.
      * returns true when successful
