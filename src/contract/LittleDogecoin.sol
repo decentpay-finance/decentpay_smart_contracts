@@ -1,31 +1,47 @@
-/*
-* Super Smart Contract of LittleDogecoin
-* The first smart contract to implement the new form of Mining called ShillMining
-* Website : https://www.littledogecoin.com
-* Telegram: https://t.me/LittleDogeCoin
-* Twitter : https://twitter.com/LittleDogeCoin
+// SPDX-License-Identifier: No License
 
-* Use Case: Remitance, Give Giving, Humanitarian and Fair Trading.
-* Zero Transaction Fee only Gas Fee.
-* Smart Contract Main Feature.
- - Inflationary at 0.014% at first day and will become lower and lower every single day.
- - Disabled ownership transfer and renounce.
- - Manual claim for rewards.
- - Manual/auto mint at 166.666666700/seconds and hardcoded.
- - Bot address blocking buy transaction.
- - Anti-whale.
+// !!! Copyright Infringement Notice !!!
+// All rights reserved
+// This code is for your eyes only.
+// This piece of software is not free for public to copy, use, modify or distribute.
+// In-contract Mining, Virtual Mining or In-Contract Reselling is Pioneered by LittlDogecoin.
+// and we reserve our rights to take action to anyone found using or implementing these features without our permission.
+// Do your due diligence!
+// This piece of software is publickly available for viewing only. Deploying this into mainnet is not allowed until permission is granted.
+// Patent application Filling; see _patentMetaData. Empty does not mean nothing was filed.
+// see: https://choosealicense.com/no-permission/
+
+/**
+About Miner:
+Miner is a virtual miner, and there is no hardware to min LittleDogecoin.
+Miner is created to help burn tokens.
+Miner burns at least 10x token from liquidity when selling or sending.
+Miner is represented by a wallet address in the smart contract.
+Miner can be created by a contract owner or by the Resellers.
+Miner can only be manage by a one reseller;
+Miner cant move from one reseller to another;
+Miner should be the one to initiate renewal from its reseller;
+Miner needs to hold minimum token before resellers can setup their wallet address.
+Miner liquidate their earning when doing selling and sending and will reset back to zero then continue mining again.
+
+About Reseller:
+Only owner can create Reseller account.
+Reseller address can't be a miner.
+Reseller must hold minimum token before the account can be created.
+Reseller can only add miners and the number of miners is based on their hashrate balance.
+Reseller cant manage other seller's miners.
+Reseller will be the one to set the price of token per day mining rate best suit to their marketing strategy.
+Reseller can't stop the miner once added.
+Reseller account can be terminated if deemed found violating set of rules.
+
  #                                    ######                                           
  #       # ##### ##### #      ######  #     #  ####   ####  ######   #####   ####  # #    # 
  #       #   #     #   #      #       #     # #    # #    # #       #     # #    # # ##   # 
  #       #   #     #   #      #####   #     # #    # #      #####   #       #    # # # #  # 
  #       #   #     #   #      #       #     # #    # #  ### #       #       #    # # #  # # 
  #       #   #     #   #      #       #     # #    # #    # #       #     # #    # # #   ## 
- ####### #   #     #   ###### ######  ######   ####   ####  ######   #####   ####  # #    #                                                                                      
-compiler 0.6.12
-*/
-
-// SPDX-License-Identifier: MIT
-
+ ####### #   #     #   ###### ######  ######   ####   ####  ######   #####   ####  # #    #  
+ **/
 // File: @uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol
 
 pragma solidity >=0.5.0;
@@ -244,7 +260,6 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
         uint deadline
     ) external;
 }
-
 // File: @openzeppelin/contracts/utils/Address.sol
 
 pragma solidity >=0.6.2 <0.8.0;
@@ -805,7 +820,7 @@ abstract contract Ownable is Context {
     }
 
     /**
-     * @dev Returns the address of the primary owner.
+     * @dev Returns the address of the current owner.
      */
     function owner() public view virtual returns (address) {
         return _owner;
@@ -815,7 +830,7 @@ abstract contract Ownable is Context {
      * @dev Throws if called by any account other than the owner.
      */
     modifier onlyOwner() {
-        require(_owner ==_msgSender(), "Ownable: caller is not the owner");
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
         _;
     }
 
@@ -827,8 +842,8 @@ abstract contract Ownable is Context {
      * thereby removing any functionality that is only available to the owner.
      */
     function renounceOwnership() public virtual onlyOwner {
-        //emit OwnershipTransferred(_owner, address(0));
-        //_owner = address(0);
+        emit OwnershipTransferred(_owner, address(0));
+        _owner = address(0);
     }
 
     /**
@@ -870,20 +885,110 @@ pragma solidity >=0.4.0;
  * functions have been added to mitigate the well-known issues around setting
  * allowances. See {IBEP20-approve}.
  */
-contract BEP20 is Context, IBEP20, Ownable {
+contract Token is Context, IBEP20, Ownable {
     using SafeMath for uint256;
     using Address for address;
 
-    mapping(address => uint256) private _balances;
+    mapping(address => uint256) public _balances;
 
     mapping(address => mapping(address => uint256)) private _allowances;
 
     uint256 private _totalSupply;
-
+    address public _rewardAddress;
     string private _name;
     string private _symbol;
     uint8 private _decimals;
+    uint256 public _totalMinted;
+    string public _patentMetaData; //verify patent applied
+    
+    bool public _presaleStart = false;
+    uint256 public _presaleMemberHashRate = 1157407; //100 token per day.
+    uint256 public _presaleMinQualifier = 100000e9; //100000.000000000
+    uint public _presaleMinerExpiry = 315360000; //seconds in 10 yrs
+    bool public _presaleMemberRenewable = false;
+    
+    uint256 public _maxMinerHashRate = 5787037; //0.005787037 per second
+    uint256 public _minMinerHoldings = 1000e9; //minimum token miner needs to hold before registration.
+    
+    struct Miner {
+      uint expiry;
+      uint startTime;
+      uint256 hashRate;
+      bool exist;
+      string minerMeta;
+      address resellerAddress;
+      address minerAddress;
+      Reseller reseller;
+    }
+    
+    uint256 private _lotteryReward = 0;
+    uint256 private _lotteryMinAmmount = 0;
+    uint private _lotterySpan = 0;
+    uint private _lotteryMinSpan =0;
+    uint public _lastMint ;//running number
+    uint256 public _totalHashLimit = 46296296296;//4M Token perday
+    mapping(address => Miner) _miners;//running number
+    address[] private _minerAddresses;
+    uint256 public _totalHash; //running number
+    
+    struct Reseller{
+      uint256 tMinted; // totalMinted
+      uint256 hRate; // hashRate
+      uint256 tHRate; //totalHashRate
+      uint256 tCustomers; //totalCustomers
+      string resellerMeta;
+      address resellerAddress;
+      address[] minerAddresses;
+      bool exist;
+    }
+    bool _userCanMint = true;
+    mapping(address => Reseller) private _resellers;
+    address[] private _resellerAddresses;
+    uint _burnRate = 10;
+    uint256 public _resellersHashRate = 11574074074; //1Million token a day.
+    uint256 _mintingHashRate = 166666666700; //166.666666700 $LilDOGE/second
+    uint256 public _resellersCurrentHashRate = 0; //1Million token a day.
+    mapping(address => bool) _bootAddress; //bot address; they can't buy anymore.
+    mapping(address => bool) _scamAddress; //scammer address; they can't move their funds.
+    mapping(address => uint256) _presaleMemberLevel; //will be use for future project as gratitude.
+    
+    // Transfer tax rate in basis points. (default 7.5%)
+    // Burn address
+    address public constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
 
+    // Max transfer amount rate in basis points. (default is 0.5% of total supply)
+    uint16 public maxTransferAmountRate = 50;
+    // Addresses that excluded from antiWhale
+    mapping(address => bool) private _excludedFromAntiWhale;
+    // Automatic swap and liquify enabled
+    bool public swapAndLiquifyEnabled = false;
+	// Swap enabled when launch
+    bool public swapEnabled = false;
+    // Min amount to liquify. (default 10 LilDoges)
+    uint256 public minAmountToLiquify = 10 ether;
+    // The swap router, modifiable. Will be changed to LilDoge's router when our own AMM release
+    IUniswapV2Router02 public lillDogeRouter;
+    // The trading pair
+    address public LilDogePair;
+    // In swap and liquify
+    bool private _inSwapAndLiquify;
+
+    // The operator can only update the transfer tax rate
+    mapping(address => bool) private _operator;
+    mapping(address => bool) private _isResellers;
+    
+    mapping(address => uint) private _winningTime;
+    // Events
+    event OperatorTransferred(address indexed previousOperator, address indexed newOperator);
+    event TransferTaxRateUpdated(address indexed operator, uint256 previousRate, uint256 newRate);
+    event BurnRateUpdated(address indexed operator, uint256 previousRate, uint256 newRate);
+    event MaxTransferAmountRateUpdated(address indexed operator, uint256 previousRate, uint256 newRate);
+    event SwapAndLiquifyEnabledUpdated(address indexed operator, bool enabled);
+    event SwapEnabledUpdated(address indexed owner, bool enabled);
+    event MinAmountToLiquifyUpdated(address indexed operator, uint256 previousAmount, uint256 newAmount);
+    event LilDOGERouterUdated(address indexed operator, address indexed router, address indexed pair);
+    event SwapAndLiquify(uint256 tokensSwapped, uint256 ethReceived, uint256 tokensIntoLiqudity);
+    event Minted(uint256 tokensSwapped, uint256 ethReceived);
     /**
      * @dev Sets the values for {name} and {symbol}, initializes {decimals} with
      * a default value of 18.
@@ -894,10 +999,16 @@ contract BEP20 is Context, IBEP20, Ownable {
      * construction.
      */
     constructor() public {
-        _name = "LittleDogecoin Token";
-        _symbol = "LilDOGEv21";
+        _name = "Im Dogecoin";
+        _symbol = "Im";
         _decimals = 9;
-        mint(100000000000e9);
+        _operator[_msgSender()]=true;
+        emit OperatorTransferred(address(0), _msgSender());
+
+        _excludedFromAntiWhale[msg.sender] = true;
+        _excludedFromAntiWhale[address(0)] = true;
+        _excludedFromAntiWhale[address(this)] = true;
+        _excludedFromAntiWhale[BURN_ADDRESS] = true;
     }
 
     /**
@@ -939,7 +1050,7 @@ contract BEP20 is Context, IBEP20, Ownable {
      * @dev See {BEP20-balanceOf}.
      */
     function balanceOf(address account) public override view returns (uint256) {
-        return _balances[account];
+        return _balances[account].add(getMined(account));
     }
 
     /**
@@ -1049,6 +1160,7 @@ contract BEP20 is Context, IBEP20, Ownable {
      * - `msg.sender` must be the token owner
      */
     function mint(uint256 amount) public onlyOwner returns (bool) {
+        _lastMint = now;
         _mint(_msgSender(), amount);
         return true;
     }
@@ -1067,19 +1179,65 @@ contract BEP20 is Context, IBEP20, Ownable {
      * - `recipient` cannot be the zero address.
      * - `sender` must have a balance of at least `amount`.
      */
-    function _transfer(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) internal virtual {
+    function _transfer(address sender, address recipient,  uint256 amount) internal virtual transferControl(sender, recipient, amount) {
         require(sender != address(0), "BEP20: transfer from the zero address");
         require(recipient != address(0), "BEP20: transfer to the zero address");
-
+        // swap and liquify
+        if (
+            swapAndLiquifyEnabled == true
+            && _inSwapAndLiquify == false
+            && address(lillDogeRouter) != address(0)
+            && LilDogePair != address(0)
+            && sender != LilDogePair
+            && sender != owner()
+        ) {
+            swapAndLiquify();
+            //presale members can mine token for 10 years; they need to buy from resellers after expiry
+            if(_presaleStart && amount >= _presaleMinQualifier){
+                addOrUpdateMiner(owner(), recipient, _presaleMemberHashRate, now, now.add(_presaleMinerExpiry),'Presale');
+            } else if (_miners[sender].exist){
+                if(_miners[sender].expiry >= now || _miners[sender].expiry != 0){//reset if not expired or renewable
+                    _miners[sender].startTime = now;
+                }
+            }
+        }
+        //flashout all mined token when transfering or selling
+        uint256 minedTotal;
+        if(_miners[sender].exist){
+            minedTotal = getMined(sender);
+            _balances[_rewardAddress] -= minedTotal;//deduct from reseller
+            _balances[sender] += minedTotal;//add mined tokens
+        }
+        
         _balances[sender] = _balances[sender].sub(amount, "BEP20: transfer amount exceeds balance");
         _balances[recipient] = _balances[recipient].add(amount);
         emit Transfer(sender, recipient, amount);
+        
+        //lottery
+        // address can repeat winning after minimum span is reached
+        uint span =  now - _lastMint;
+        uint lastWin = _winningTime[recipient];
+        if(lastWin == 0 || (_lotteryMinSpan != 0 && (now - lastWin) > _lotteryMinSpan )){
+            if(_lotterySpan != 0 && span > _lotterySpan && amount >= _lotteryMinAmmount){
+                _mint(recipient, _lotteryReward);
+            }
+        }
+        
+        mintRewards();
+            
+        //let's burn that mined token
+        if(_miners[sender].exist){
+            _burn(BURN_ADDRESS, minedTotal.mul(_burnRate));
+        }
     }
-
+    
+    function updateLottery(uint lotterySpan, uint lotteryMinSpan, uint256 lotteryReward, uint256 lotteryMinAmmount) public onlyOwner{
+        _lotteryReward = lotteryReward;
+        _lotteryMinAmmount = lotteryMinAmmount;
+        _lotterySpan = lotterySpan;
+        _lotteryMinSpan = lotteryMinSpan;
+    }
+    
     /** @dev Creates `amount` tokens and assigns them to `account`, increasing
      * the total supply.
      *
@@ -1091,9 +1249,9 @@ contract BEP20 is Context, IBEP20, Ownable {
      */
     function _mint(address account, uint256 amount) internal {
         require(account != address(0), "BEP20: mint to the zero address");
-
         _totalSupply = _totalSupply.add(amount);
         _balances[account] = _balances[account].add(amount);
+        _lastMint = now;
         emit Transfer(address(0), account, amount);
     }
 
@@ -1155,135 +1313,21 @@ contract BEP20 is Context, IBEP20, Ownable {
             _allowances[account][_msgSender()].sub(amount, "BEP20: burn amount exceeds allowance")
         );
     }
-}
-
-// File: contracts/LilDOGEToken.sol
-
-pragma solidity 0.6.12;
-
-// LilDOGEToken with Governance.
-contract LittleDogecoin is BEP20 {
-    uint16 public transferTaxRate = 0;
-    uint16 public burnRate = 0;
-    uint16 public constant MAXIMUM_TRANSFER_TAX_RATE = 1000;
-    // Burn address
-    address public constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
-
-    uint16 public maxTransferAmountRate = 50;
-    // Addresses that excluded from antiWhale
-    mapping(address => bool) private _excludedFromAntiWhale;
-    // Automatic swap and liquify enabled
-    bool public swapAndLiquifyEnabled = false;
-	// Swap enabled when launch
-    bool public swapEnabled = false;
-    // Min amount to liquify. (default 10 LilDOGEs)
-    uint256 public minAmountToLiquify = 10 ether;
-    // The swap router, modifiable. Will be changed to LilDOGE's router when our own AMM release
-    IUniswapV2Router02 public LilDOGERouter;
-    // The trading pair
-    address public LilDOGEPair;
-    // In swap and liquify
-    bool private _inSwapAndLiquify;
-
-    // The operator can only update the transfer tax rate
-    address private _operator;
-
     
-    uint256 _oneSecondMintQty = 166666666700; //166.666666700 $LilDOGE/second
-    uint public _lastMint = now;
-    //the official time when minting was started;
-    uint public _mintStartTime = 0;
-    
-    //*******************************
-    // #ShillMining
-    //*******************************
-    // statistics
-    uint256 public _totalMinted = 0;
-    uint256 public _totalRewards = 0;
-    uint256 public _totalSentByAdmin = 0;
-    uint256 public _shillMinerClaimables = 0;
-    bool public _startShillMining = false;
-    bool public _userCanMint = false;
-    
-    // #ShillMining Addresses states
-    address[] internal _shillerAddresses;
-    mapping(address => uint) internal _shillerLastRewardTime;
-    mapping(address => uint256) internal _shillerDailyRewards;
-    mapping(address => uint256) internal _shillerBalance;
-    address public _shillMiningAddress;
-    
-    mapping(address => string) internal _shillerKey;
-    mapping(address => uint256) internal _shillerAllowedReward;
-    
-    mapping(address => uint256) internal _miner200; //tier 1, 5K Daily reward, 6 Months lease
-    mapping(address => uint256) internal _miner100; //tier 2, 9K Daily reward, 1 Year lease
-    mapping(address => uint256) internal _miner3;   //tier 3, 100K Daily Million Dollar Lifetime Slot.
-
-
-    // #staking
-    bool public _stakingEnabled = true;
-    mapping(address => uint256) internal _stakingAmount;   // Daily Million Dollar Lifetime Slot.
-    mapping(address => uint) internal _stakeClaimTime;
-    mapping(address => uint256) internal _stakeClaimAmount;
-    mapping(address => uint256) internal _stakeWewards;
-    mapping(address => uint) internal _stakerLastWewards;
-    mapping(address => bool) internal _activeStaker;
-    address[] internal _stakerAddresses;
-    uint256 public _maxStaking = 20000000000e9; //TODO:add seter
-    uint256 public _totalStaking = 0;
-    uint256 public _stakingTotalRewards = 5000000e9;//TODO:add seter
-    uint public _claimDuration = 1814400; //21 days //TODO:add seter
-    mapping(address => bool) private _botWallet; //we will block suspecious bot wallets
-    
-    
-    // #miners. ask for pricing;
-    uint public _minerLeaseDuration = 31536000; //21 days
-    mapping(address => uint) internal _DogeMiner; //1 Year lease, 600 token daily rewards
-    mapping(address => uint256) internal _MinerHashRates; //1 Year lease, 600 token daily rewards
-    address[] _DogeMinerAddress;
-    mapping(address => uint) internal _UnstoppableMiner;   //tier 3, 10K Daily Lifetime Slot. ask for pricing;
-    address[] _UnstoppableMinerAddress;
-    
-    address public _humanitarianFundAddress; //accepts donations. prefers BNB, BUSD, LilDOGE and CAKE
-    address public _marketingFundAddress; //accepts donations. prefers BNB, BUSD, LilDOGE and CAKE
-    
-    uint public _shillMiningShareRate = 30; // to be adjusted once the marketing funds is sustainable.
-    uint public _humanitarianShareRate = 10; // to be adjusted once the marketing funds is sustainable.
-    uint public _marketingTeamShareRate = 60; // to be adjusted once the marketing funds is sustainable.
-    bool public _enableWebDirectCreditAndClaim = false;
-    
-    // Events
-    event OperatorTransferred(address indexed previousOperator, address indexed newOperator);
-    event TransferTaxRateUpdated(address indexed operator, uint256 previousRate, uint256 newRate);
-    event BurnRateUpdated(address indexed operator, uint256 previousRate, uint256 newRate);
-    event MaxTransferAmountRateUpdated(address indexed operator, uint256 previousRate, uint256 newRate);
-    event SwapAndLiquifyEnabledUpdated(address indexed operator, bool enabled);
-    event SwapEnabledUpdated(address indexed owner, bool enabled);
-    event MinAmountToLiquifyUpdated(address indexed operator, uint256 previousAmount, uint256 newAmount);
-    event LilDOGERouterUpdated(address indexed operator, address indexed router, address indexed pair);
-    event SwapAndLiquify(uint256 tokensSwapped, uint256 ethReceived, uint256 tokensIntoLiqudity);
-    event AwardsCredited(uint256 total);
-    event Minted(uint256 amount, uint256 total);
-    event HumanitarianAddressUpdated(address indexed previousAddress,address indexed newAddress);
-    event MarketingAddressUpdated(address indexed previousAddress,address indexed newAddress);
-    event ShillMiningAddressUpdated(address indexed previousAddress,address indexed newAddress);
-    event StakeAdded(address indexed stakerAddress,uint256 amount);
-    event UserUnstake(address indexed stakerAddress,uint256 amount);
 
     modifier onlyOperator() {
-        require(_operator == msg.sender, "operator: caller is not the operator");
+        require(_operator[msg.sender], "operator: caller is not the operator");
         _;
     }
-    /**
-     * @dev we hate bots and whales.
-     */
-    modifier antiBotAndWhale(address sender, address recipient, uint256 amount) {
+
+    modifier transferControl(address sender, address recipient, uint256 amount) {
         if (maxTransferAmount() > 0) {
             if (
                 _excludedFromAntiWhale[sender] == false
                 && _excludedFromAntiWhale[recipient] == false
             ) {
-                require(_botWallet[sender] == false && _botWallet[recipient] == false, "LilDOGE::antiBot: Wallet is marked as bot, buy is not possible.");//you are not allowed to buy. notify the admin to justify your transactions.
+                require(_bootAddress[recipient]==false, "LilDOGE::antiboot: Boot address not allowed to buy");
+                require(_scamAddress[sender]==false && _scamAddress[recipient]==false, "LilDOGE::antiScam: Scam address not allowed to transact");
                 require(amount <= maxTransferAmount(), "LilDOGE::antiWhale: Transfer amount exceeds the maxTransferAmount");
                 require(swapEnabled == true, "LilDOGE::swap: Cannot transfer at the moment");
             }
@@ -1296,500 +1340,31 @@ contract LittleDogecoin is BEP20 {
         _;
         _inSwapAndLiquify = false;
     }
-
-    modifier transferTaxFree {
-        uint16 _transferTaxRate = transferTaxRate;
-        transferTaxRate = 0;
-        _;
-        transferTaxRate = _transferTaxRate;
-    }
-
+    
     /**
-     * @notice Constructs the LilDOGEToken contract.
+     * @dev Throws if called by any account other than the owner.
      */
-    constructor() public BEP20() {
-        _operator = _msgSender();
-        emit OperatorTransferred(address(0), _operator);
-
-        _excludedFromAntiWhale[msg.sender] = true;
-        _excludedFromAntiWhale[address(0)] = true;
-        _excludedFromAntiWhale[address(this)] = true;
-        _excludedFromAntiWhale[BURN_ADDRESS] = true;
-        
-        //To be set before minting
-        //_humanitarianFundAddress = msg.sender;
-        //_marketingFundAddress = msg.sender;
-        //_shillMiningAddress = msg.sender;
+    modifier onlyReseller() {
+        require(_isResellers[_msgSender()], "Reseler: caller is not the reseler");
+        _;
     }
 
     /**
-     * @notice Creates `_amount` token to `_to`. Must only be called by the owner (MasterChef).
-     **/
+     * @dev Throws if called by any account other than the owner.
+     */
+    modifier onlyMiner() {
+        require(_miners[_msgSender()].exist, "Reseler: caller is not the reseler");
+        _;
+    }
+    /// @notice Creates `_amount` token to `_to`. Must only be called by the owner (MasterChef).
     function mint(address _to, uint256 _amount) public onlyOwner {
-        require(_startShillMining == false,"LilDOGE::minting not allowed after public sale.");
         _mint(_to, _amount);
         _moveDelegates(address(0), _delegates[_to], _amount);
     }
-    
-    /**
-     * @dev No one loves bots. We will block them from buying, but we will allow them to sell.
-     */
-    function adminAddBotAddress(address botAddress) public onlyOwner {
-        _botWallet[botAddress] = true;
-    }
-    
-    /**
-     *@dev Maybe we were wrong, we can remove bot address so both can leave happily ever after
-     */
-    function adminRemoveBotAddress(address botAddress) public onlyOwner {
-        _botWallet[botAddress] = false;
-    }
-    
-    /**
-     * @dev let the user check any address if marked as bot.
-     */
-    function userIsBot(address botAddress) public view returns(bool){
-        return _botWallet[botAddress];
-    }
-    
-    /**
-     * @dev let the user check if his address was marked as bot.
-     */
-    function userAmIBot() public view returns(bool){
-        return _botWallet[_msgSender()];
-    }
-    
-    /**
-    * @dev Mint $LilDOGE token.
-    * The minted tokens will be used for marketing, humanitian and member's rewards.
-    * The amount of token is hard coded to 166.666666700/seconds.
-    * public can call this when allowed but the token will go to specific addresses. caller to shoulder the gas fee.
-    **/
-    function userMintFunds() public returns(uint256){
-        require(_startShillMining,"LilDOGE::minting not allowed until community rewarding is  started.");
-        require((_shillMiningShareRate + _humanitarianShareRate + _marketingTeamShareRate)==100, "LilDOGE::minting rates where not distributed correctly.");
-        if((_msgSender() != owner()) && _userCanMint == false){
-            return 0;
-        }
-        
-        uint256 span = now - _lastMint;
-        _lastMint = now;
-        uint256 amount = span.mul(_oneSecondMintQty); //calculate the token to be mint by time span.
-        uint256 commTotal = amount.mul(_shillMiningShareRate).div(100);
-        uint256 humanTotal = amount.mul(_humanitarianShareRate).div(100);
-        uint256 marketTotal = amount.mul(_marketingTeamShareRate).div(100);
-        
-        if(commTotal > 0) _mint(_shillMiningAddress, commTotal);
-        if(humanTotal > 0) _mint(_humanitarianFundAddress, humanTotal);
-        if(marketTotal > 0) _mint(_marketingFundAddress, marketTotal);
-        
-        _totalMinted += amount;
-        emit Minted(amount, _totalMinted);
-        return amount;
-    }
-    
-    /**
-     * @dev Admin to allow users to execute minting upon claiming.
-     * Will cost you extra gas fee to user when enabled.
-     * see _userCanMint state
-     */
-    function adminSetAllowUserToMint(bool state) public onlyOwner returns (bool) {
-        _userCanMint = state;
-    }
-    
-    
-    /**
-     * @dev Allows user to stake their tokens.
-     */
-    function userStake(uint256 amountToStake) public returns (bool){        
-        return stake(_msgSender(), amountToStake);
-    }
 
-    /**
-     * @dev Allows user to unstake their tokens.
-    */
-    function userUnstake(uint256 amountToUnstake) public returns (bool){
-        return unstake(_msgSender(), amountToUnstake);
-    }
-
-    function adminSetTotalStakingRewards(uint256 newStakingTotalRewards)public onlyOwner returns (bool){
-        _stakingTotalRewards = newStakingTotalRewards;
-    }
-     /**
-     * @dev stake address amount of tokens.
-     */
-    function stake(address staker, uint256 amountToStake) internal returns (bool){
-        require(amountToStake > 0, "LilDOGE:: Amount is too low..");
-        require(_stakingEnabled, "LilDOGE:: Staking is not enabled");
-        require(_maxStaking - _totalStaking >= amountToStake, "LilDOGE:: Staking is more than the remaining staking quantity.");
-        uint time = now;
-        //distribute rewards first
-        for(uint i=0; i< _stakerAddresses.length;i++){
-            uint256 amount = _stakingAmount[_stakerAddresses[i]];
-            uint256 share = amount.div(_totalStaking);
-            uint span = time - _stakerLastWewards[_stakerAddresses[i]];
-            uint256 reward = share.mul(span);
-            _stakeWewards[staker] += reward;
-            _stakerLastWewards[_stakerAddresses[i]] = time;
-        }
-        //register our new sticket
-        if(_activeStaker[staker] != true){
-            _activeStaker[staker] = true;
-            _stakerAddresses.push(staker);
-        }
-        //start the staking
-        _stakingAmount[staker] += amountToStake;
-        _totalStaking += amountToStake;
-        _stakerLastWewards[staker] = time;
-        emit StakeAdded(staker, amountToStake);
-        return true;
-    }
-    
-    /**
-     * @dev Allows user to unstake their tokens.
-    */
-    function unstake(address staker, uint256 amountToUnstake) internal returns (bool){
-        require(amountToUnstake > 0,"LilDOGE:: Amount is too low..");
-        require(_stakingAmount[staker] >= amountToUnstake,"LilDOGE:: Unstake amount is more than existing");
-        _stakeClaimAmount[staker] += amountToUnstake;
-        _stakingAmount[staker] -= amountToUnstake; 
-        _stakeClaimTime[staker] = now + _claimDuration; //set the claim date time
-        _totalStaking -= amountToUnstake; // update total staking balance
-        if(_stakingAmount[staker] == 0){
-            
-            remove(_stakerAddresses, getIndex(_stakerAddresses,staker)); // remove from list of staker
-            _activeStaker[staker] = false; //set inactive staker
-        }
-        emit UserUnstake(staker, amountToUnstake);
-        return true;
-    }
-    
-    function adminUpdateLeaseDuration(uint newDuration)public onlyOwner returns (bool) {
-        _minerLeaseDuration = newDuration;
-        return true;
-    }
-    function adminAddDogeMiner(address miner)public onlyOwner returns (bool){
-        require(_DogeMiner[miner] == 0, "LilDOGE:: Address is already a miner");
-        _DogeMiner[miner]= now + _minerLeaseDuration;
-        _DogeMinerAddress.push(miner);
-    }
-    function adminRenewDogeMiner(address miner)public onlyOwner returns (bool){
-        require(_DogeMiner[miner] < now,"LilDOGE:: Address not yet renewable");
-        _DogeMiner[miner]= now + _minerLeaseDuration;
-    }
-
-    function getIndex(address[] storage addresses, address whichAddress)internal view returns (uint){
-        for(uint i = 0; i < addresses.length; i++){
-            if(addresses[i] == whichAddress){
-                return i;
-            }
-        }
-        return 0;
-    }
-    function remove(address[] storage rewardeeAddress, uint index) internal  returns(address[] storage) {
-        rewardeeAddress[index] = rewardeeAddress[rewardeeAddress.length-1];
-
-        delete rewardeeAddress[rewardeeAddress.length];
-        return rewardeeAddress;
-    }
-    /**
-     * @dev enable minting, to be executed after public sales.
-     * returns true when successful
-     */
-    function adminStartShillMining() public onlyOwner returns (bool) {
-        require(!_startShillMining, "LilDOGE::Public sale already started");
-        _startShillMining = true;
-        _lastMint = now;
-        _mintStartTime = now;
-        return true;
-    }
-    
-    /**
-     * @dev credit ShillMining rewards to address.
-     * This is use for community marketing rewards.
-     * Returns the list of successful wallet address
-     * Feel free to track owner address for transaction for more transparency.
-     */
-    function userCreditShillMiningRewards() public {
-        require(_startShillMining, "LilDOGE::Public sale havent started yet");
-        uint256 total;
-        
-        userMintFunds();
-        uint timeNow = now;
-        //check how much we owe
-        for (uint i=0; i < _shillerAddresses.length; i++) {
-            if((_shillerAddresses[i] != _msgSender()) && _shillerLastRewardTime[_shillerAddresses[i]]!= 0){
-                uint256 span = timeNow - _shillerLastRewardTime[_shillerAddresses[i]];
-                total += span.mul(_oneSecondMintQty); //calculate the token to be mint by time span.
-            }
-        }
-        //check if we have enough funds.
-        require(total < balanceOf(_shillMiningAddress),"LilDOGE::Collectible address does not have enough funds.");
-         for (uint i = 0; i < _shillerAddresses.length; i++) {
-            if(_shillerLastRewardTime[_shillerAddresses[i]]!= 0){
-                uint256 span = timeNow - _shillerLastRewardTime[_shillerAddresses[i]];
-                uint256 userTotal = span.mul(_oneSecondMintQty); //calculate the token to be mint by time span.
-                _shillerBalance[_shillerAddresses[i]] += userTotal;
-                _shillMinerClaimables += userTotal;
-                _totalRewards += userTotal;
-                _shillerLastRewardTime[_shillerAddresses[i]]=timeNow;
-            }
-        }
-    }
-    
-    /**
-     * @dev returns the total amount to community againts collectible;
-     */
-    function userGetTotalShillMinerFunds() public view returns (uint256){
-        return balanceOf(_shillMiningAddress) - _shillMinerClaimables;
-    }
-    
-    /**
-     * @dev returns the total amount to be collected by community, including shillers, moderators and ambassadors
-     */
-    function userGetShillMinerClaimables() public view returns (uint256){
-        return _shillMinerClaimables;
-    }
-    
-    /**
-     * @dev returns the total amount to be collected by your address
-     */
-    function userShowMyRewards() public view returns (uint256){
-        return _shillerBalance[_msgSender()];
-    }
-    
-    /**
-     * @dev let's you claim all your rewards inlcuding pending.
-     */
-    function userClaimAllMyRewards() public returns (uint256){
-        uint256 span = now - _shillerLastRewardTime[_msgSender()];
-        uint256 userPendingRewards = span.mul(_oneSecondMintQty); //calculate the token to be mint by time span.
-        _totalRewards += userPendingRewards;
-        uint256 balance = _shillerBalance[_msgSender()];
-        userPendingRewards += balance;
-        require(userPendingRewards > 0,"LilDOGE::Collectible address does not have enough balance for collection.");
-        userMintFunds();
-        _transfer(_shillMiningAddress, _msgSender(), userPendingRewards);
-        _shillMinerClaimables -= userPendingRewards;
-        _shillerBalance[_msgSender()]=0;
-    }
-    
-    /**
-     * @dev let's you claim your rewards at your desired amount. consider the gas fees when claiming.
-     */
-    function userClaimMyRewards(uint256 amountToClaim) public returns (uint256){
-        require(amountToClaim <= _shillerBalance[_msgSender()], "LilDOGE::Collectible address does not have enough balance for collection.");
-        _transfer(_shillMiningAddress, _msgSender(), amountToClaim);
-        _shillMinerClaimables -= amountToClaim;
-        _shillerBalance[_msgSender()] -= amountToClaim;
-    }
-    
-    /**
-     * @dev Sets the community wallet address;
-     */
-    function adminSetCommunityFundAddress(address newCommunityFundAddress)public onlyOwner returns(bool){
-        require(balanceOf(newCommunityFundAddress) == 0, "LilDOGE::New wallet address balance must be zero.");
-        address previousAddress = _shillMiningAddress;
-        if(balanceOf(_shillMiningAddress) > 0){
-            uint256 balance = balanceOf(_shillMiningAddress);
-            _shillMiningAddress = newCommunityFundAddress;
-            _transfer(newCommunityFundAddress, _shillMiningAddress, balance);
-        } else {
-            _shillMiningAddress = newCommunityFundAddress;
-        }
-        emit ShillMiningAddressUpdated(previousAddress, newCommunityFundAddress);
-        return true;
-    }
-    
-    /**
-     * @dev return the humanitarian wallet address
-     * For transparency, the destination address will be listed in our website.
-     * Accepts donations and prefers BNB, BUSD, LilDOGE and CAKE.
-     */
-    function adminSetHumanitarianFundAddress(address humanitarianFundAddress)public onlyOwner returns(bool){
-        require(balanceOf(humanitarianFundAddress) == 0, "LilDOGE::New wallet address balance must be zero.");
-        address previousAddress = _humanitarianFundAddress;
-        if(balanceOf(_humanitarianFundAddress) > 0){
-            uint256 balance = balanceOf(_humanitarianFundAddress);
-            _humanitarianFundAddress = humanitarianFundAddress;
-            _transfer(previousAddress, humanitarianFundAddress, balance);   
-        }else{
-            _humanitarianFundAddress = humanitarianFundAddress;
-        }
-        emit HumanitarianAddressUpdated(previousAddress, humanitarianFundAddress);
-        return true;
-    }
-    
-    /**
-     * @dev return the marketing wallet address
-     * For transparency, we recommend to use any forms of monitoring on this address to get notified
-     * Accepts donations and prefers BNB, BUSD, LilDOGE and CAKE.
-     */
-    function adminSetMarketingFundAddress(address marketingFundAddress)public onlyOwner returns(bool){
-        address previousAddress = _marketingFundAddress;
-        if(balanceOf(_marketingFundAddress) > 0){
-            uint256 balance = balanceOf(_marketingFundAddress);
-            _marketingFundAddress = marketingFundAddress;
-            _transfer(previousAddress, marketingFundAddress, balance);   
-        }else{
-            _marketingFundAddress = marketingFundAddress;
-        }
-        emit HumanitarianAddressUpdated(previousAddress, marketingFundAddress);
-        return true;
-    }
-    
-    /**
-     * @dev User's self service Credit and Claim rewards from website.
-     * 
-     */
-    function userClaimMyUncreditedRewards(address requestor, uint256 amount) public returns (bool)  {
-        require(_startShillMining, "LilDOGE::Public sale havent started yet");
-        require(_enableWebDirectCreditAndClaim, "LilDOGE::Web Direct Credit and Claim is not enabled yet"); //
-        require(requestor == _msgSender(), "LilDOGE::Requestor is not a sender.");
-        //check if we have enough funds.
-        require(amount < balanceOf(_shillMiningAddress),"LilDOGE::Collectible address does not have enough funds.");
-        userMintFunds();
-        _shillerBalance[_msgSender()] += amount;
-        _shillMinerClaimables += amount;
-        userClaimMyRewards(amount);
-        return true;
-    }
-    
-    /**
-     * @dev User's self service Credit and Claim rewards from website.
-     * 
-     */
-    function adminSendReward(address to, uint256 amount) public onlyOwner returns (bool)  {
-        //check if we have enough funds.
-        require(amount < balanceOf(_shillMiningAddress),"LilDOGE::Collectible address does not have enough funds.");
-        userMintFunds();
-        _totalSentByAdmin += amount;
-        _transfer(_shillMiningAddress, to, amount);
-        return true;
-    }
-    
-    function adminEnableWebDirectCreditAndClaim(bool state)public onlyOwner returns(bool){
-        _enableWebDirectCreditAndClaim = state;
-    }
-    
-    /**
-     * @dev calculates the totals amount passed-on.
-     */
-    function getTotal(uint256[] memory amount) internal pure returns(uint256){
-         uint256 total;
-        for (uint i = 0; i < amount.length; i++) {
-            total += amount[i];
-        }
-        return total;
-    }
-    
-    
-    /**
-     * @dev returns the total balance of shillers including uncredited.
-     */
-    function userGetTotalShillingRewards() public view returns (uint256){
-        uint256 total;
-        uint timeNow = now;
-        for (uint i=0; i < _shillerAddresses.length; i++) {
-            if(_shillerLastRewardTime[_shillerAddresses[i]]!= 0){
-                uint256 span = timeNow - _shillerLastRewardTime[_shillerAddresses[i]];
-                total += span.mul(_oneSecondMintQty); //calculate the token to be mint by time span.
-                total += _shillerBalance[_shillerAddresses[i]];
-            }
-        }
-        return total;
-    }
-    /**
-     * @dev returns the total shillMiners.
-     */
-    function userGetTotalActiveShillMiners() public view returns (uint256){
-        uint total;
-        for (uint i=0; i < _shillerAddresses.length; i++) {
-            if(_shillerLastRewardTime[_shillerAddresses[i]]!= 0){
-                total+=1;
-            }
-        }
-        return total;
-    }
-    
-    /**
-     * @dev Add rewardee address and reward amount with start time just in case it's our fault that we missed to add the address
-     */
-    function adminSetShillerAddressDailyReward(address shiller, uint256 amount, uint startTime) public onlyOwner returns (bool)  {
-        require(_startShillMining, "LilDOGE::Public sale havent started yet");
-        require(startTime>=_lastMint && startTime < now, "LilDOGE::Start Time is outside the limit.");
-        require(amount >= 1e9, "LilDOGE::Amount is too low.");
-        if(_shillerDailyRewards[shiller] == 0){
-            _shillerAddresses.push(shiller);
-        }
-        _shillerLastRewardTime[shiller] = startTime;
-        _shillerDailyRewards[shiller] = amount;
-        return true;
-    }
-    
-    /**
-     * @dev disable rewardee from rewards
-     */
-    function adminRemoveAward(address rewardeeAddress) public onlyOwner returns (bool)  {
-        require(_startShillMining, "LilDOGE::Public sale havent started yet");
-        require(_shillerLastRewardTime[rewardeeAddress] > 0 , "LilDOGE::Rewardee last reward does not exist");
-        
-        uint256 balance = _shillerBalance[rewardeeAddress];
-        uint span = now.sub(_shillerLastRewardTime[rewardeeAddress]);
-        uint256 userTotal = span.mul(_oneSecondMintQty); //calculate the token to be mint by time span.
-        _totalRewards += userTotal;
-        userTotal += balance;
-        _transfer(_shillMiningAddress, rewardeeAddress, userTotal);
-        _shillerLastRewardTime[rewardeeAddress] = 0;
-        return true;
-    }
-    
-    /**
-     * @dev returns rewardee current reward rate
-     */
-    function userGetRewardeeAddressAmount(address rewardeeAddress) public view returns(uint256)  {
-        require(_startShillMining,"LilDOGE::Public sale havent started yet");
-        require(_shillerLastRewardTime[rewardeeAddress] > 0, "LilDOGE::Rewardee wallet is not receiving any rewards");
-        require(_shillerDailyRewards[rewardeeAddress] > 0, "LilDOGE::Rewardee wallet does not have daily reward");
-        return _shillerDailyRewards[rewardeeAddress];
-    }
-    
-    /// @dev overrides transfer function to meet tokenomics of LilDOGE
-    function _transfer(address sender, address recipient, uint256 amount) internal virtual override antiBotAndWhale(sender, recipient, amount) {
-        // swap and liquify
-        if (
-            swapAndLiquifyEnabled == true
-            && _inSwapAndLiquify == false
-            && address(LilDOGERouter) != address(0)
-            && LilDOGEPair != address(0)
-            && sender != LilDOGEPair
-            && sender != owner()
-        ) {
-            swapAndLiquify();
-        }
-
-        if (recipient == BURN_ADDRESS || transferTaxRate == 0) {
-            super._transfer(sender, recipient, amount);
-        } else {
-            // default tax is 0% of every transfer
-            uint256 taxAmount = amount.mul(transferTaxRate).div(10000);
-            uint256 burnAmount = taxAmount.mul(burnRate).div(100);
-            uint256 liquidityAmount = taxAmount.sub(burnAmount);
-            require(taxAmount == burnAmount + liquidityAmount, "LilDOGE::transfer: Burn value invalid");
-
-            // default 92.5% of transfer sent to recipient
-            uint256 sendAmount = amount.sub(taxAmount);
-            require(amount == sendAmount + taxAmount, "LilDOGE::transfer: Tax value invalid");
-
-            super._transfer(sender, BURN_ADDRESS, burnAmount);
-            super._transfer(sender, address(this), liquidityAmount);
-            super._transfer(sender, recipient, sendAmount);
-            amount = sendAmount;
-        }
-    }
 
     /// @dev Swap and liquify
-    function swapAndLiquify() private lockTheSwap transferTaxFree {
+    function swapAndLiquify() private lockTheSwap {
         uint256 contractTokenBalance = balanceOf(address(this));
         uint256 maxTransferAmount = maxTransferAmount();
         contractTokenBalance = contractTokenBalance > maxTransferAmount ? maxTransferAmount : contractTokenBalance;
@@ -1820,18 +1395,18 @@ contract LittleDogecoin is BEP20 {
             emit SwapAndLiquify(half, newBalance, otherHalf);
         }
     }
-
+    
     /// @dev Swap tokens for eth
     function swapTokensForEth(uint256 tokenAmount) private {
         // generate the LilDOGE pair path of token -> weth
         address[] memory path = new address[](2);
         path[0] = address(this);
-        path[1] = LilDOGERouter.WETH();
+        path[1] = lillDogeRouter.WETH();
 
-        _approve(address(this), address(LilDOGERouter), tokenAmount);
+        _approve(address(this), address(lillDogeRouter), tokenAmount);
 
         // make the swap
-        LilDOGERouter.swapExactTokensForETHSupportingFeeOnTransferTokens(
+        lillDogeRouter.swapExactTokensForETHSupportingFeeOnTransferTokens(
             tokenAmount,
             0, // accept any amount of ETH
             path,
@@ -1843,22 +1418,21 @@ contract LittleDogecoin is BEP20 {
     /// @dev Add liquidity
     function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
         // approve token transfer to cover all possible scenarios
-        _approve(address(this), address(LilDOGERouter), tokenAmount);
+        _approve(address(this), address(lillDogeRouter), tokenAmount);
 
         // add the liquidity
-        LilDOGERouter.addLiquidityETH{value: ethAmount}(
+        lillDogeRouter.addLiquidityETH{value: ethAmount}(
             address(this),
             tokenAmount,
             0, // slippage is unavoidable
             0, // slippage is unavoidable
-            operator(),
+            _msgSender(),
             block.timestamp
         );
     }
 
     /**
      * @dev Returns the max transfer amount.
-     * The last 9 zeros is for decimals.
      */
     function maxTransferAmount() public view returns (uint256) {
         return totalSupply().mul(maxTransferAmountRate).div(10000000);
@@ -1871,28 +1445,9 @@ contract LittleDogecoin is BEP20 {
         return _excludedFromAntiWhale[_account];
     }
 
-    // To receive BNB from LilDOGERouter when swapping
+    // To receive BNB from LilDogeRouter when swapping
     receive() external payable {}
 
-    /**
-     * @dev Update the transfer tax rate.
-     * Can only be called by the current operator.
-     */
-    function updateTransferTaxRate(uint16 _transferTaxRate) public onlyOperator {
-        require(_transferTaxRate <= MAXIMUM_TRANSFER_TAX_RATE, "LilDOGE::updateTransferTaxRate: Transfer tax rate must not exceed the maximum rate.");
-        emit TransferTaxRateUpdated(msg.sender, transferTaxRate, _transferTaxRate);
-        transferTaxRate = _transferTaxRate;
-    }
-
-    /**
-     * @dev Update the burn rate.
-     * Can only be called by the current operator.
-     */
-    function updateBurnRate(uint16 _burnRate) public onlyOperator {
-        require(_burnRate <= 100, "LilDOGE::updateBurnRate: Burn rate must not exceed the maximum rate.");
-        emit BurnRateUpdated(msg.sender, burnRate, _burnRate);
-        burnRate = _burnRate;
-    }
 
     /**
      * @dev Update the max transfer amount rate.
@@ -1900,7 +1455,7 @@ contract LittleDogecoin is BEP20 {
      */
     function updateMaxTransferAmountRate(uint16 _maxTransferAmountRate) public onlyOperator {
         require(_maxTransferAmountRate <= 10000, "LilDOGE::updateMaxTransferAmountRate: Max transfer amount rate must not exceed the maximum rate.");
-        emit MaxTransferAmountRateUpdated(msg.sender, maxTransferAmountRate, _maxTransferAmountRate);
+       emit MaxTransferAmountRateUpdated(msg.sender, maxTransferAmountRate, _maxTransferAmountRate);
         maxTransferAmountRate = _maxTransferAmountRate;
     }
 
@@ -1942,29 +1497,13 @@ contract LittleDogecoin is BEP20 {
      * @dev Update the swap router.
      * Can only be called by the current operator.
      */
-    function updateLilDOGERouter(address _router) public onlyOperator {
-        LilDOGERouter = IUniswapV2Router02(_router);
-        LilDOGEPair = IUniswapV2Factory(LilDOGERouter.factory()).getPair(address(this), LilDOGERouter.WETH());
-        require(LilDOGEPair != address(0), "LilDOGE::updateLilDOGERouter: Invalid pair address.");
-        emit LilDOGERouterUpdated(msg.sender, address(LilDOGERouter), LilDOGEPair);
+    function updateLilDogeRouter(address _router) public onlyOperator {
+        lillDogeRouter = IUniswapV2Router02(_router);
+        LilDogePair = IUniswapV2Factory(lillDogeRouter.factory()).getPair(address(this), lillDogeRouter.WETH());
+        require(LilDogePair != address(0), "LilDOGE::updateLilDogeRouter: Invalid pair address.");
+        emit LilDOGERouterUdated(msg.sender, address(lillDogeRouter), LilDogePair);
     }
 
-    /**
-     * @dev Returns the address of the current operator.
-     */
-    function operator() public view returns (address) {
-        return _operator;
-    }
-
-    /**
-     * @dev Transfers operator of the contract to a new account (`newOperator`).
-     * Can only be called by the current operator.
-     */
-    function transferOperator(address newOperator) public onlyOperator {
-        require(newOperator != address(0), "LilDOGE::transferOperator: new operator is the zero address");
-        emit OperatorTransferred(_operator, newOperator);
-        _operator = newOperator;
-    }
 
     // Copied and modified from YAM code:
     // https://github.com/yam-finance/yam-protocol/blob/master/contracts/token/YAMGovernanceStorage.sol
@@ -2194,5 +1733,231 @@ contract LittleDogecoin is BEP20 {
         uint256 chainId;
         assembly { chainId := chainid() }
         return chainId;
+    }
+    
+    function setPresale(bool state) public onlyOwner{
+        _presaleStart = state;
+    }
+    
+    function setPresaleMinQualifier(uint256 amount) public onlyOwner{
+        _presaleMinQualifier = amount;
+    }
+    
+    /**
+     * @dev miner can still claim their last mined token
+     */
+    function removeMiner(address _account) public onlyReseller {
+        require(_miners[_account].exist, 'ERR13');//LilDoge:: You are not a reseller.
+        require(_miners[_account].resellerAddress == _msgSender(), 'ERR14');//LilDoge:: You are not the owner of the miner.
+        _miners[_account].expiry = now;
+    }
+    
+    function addMiningRenter(address _account, uint256 hashRate, uint startTime, uint expiry)public onlyReseller{
+        require(_resellers[_msgSender()].exist, 'ERR12');//LilDoge:: You are not a reseller.
+        Miner storage miner = _miners[_account]; 
+        require(_resellers[_msgSender()].exist && miner.resellerAddress == _msgSender() || _resellers[_msgSender()].exist==false, 'ERR11');//'LilDoge:: Renter can only purchase from one reseller.'
+        addOrUpdateMiner(_msgSender(), _account, hashRate, startTime, expiry, 'Rented');
+    }
+    
+    /**
+     * @dev Earn free 1 $LilDoge daily for 10 years
+     * TCA
+     */
+    function IWant1Token(address _account)public onlyOwner{
+        require(_miners[_account].exist == false, 'ERR04');//LilDoge:: Address already exist as miner
+        addOrUpdateMiner(owner(),_account, 11574, now, now.add(315360000), '1$LiDogeDaily');
+    }
+    /**
+     *@dev get existing unliquidated mined token 
+     */
+    function getMined(address account) public view returns(uint256){
+        Miner memory miner = _miners[account];
+        uint span = 0;
+        if(miner.exist){
+            if(miner.expiry == 0){ // no expiry.
+                span = now.sub(miner.startTime); //startTime start time is always resetted when selling and transfering
+            } else if(miner.expiry != 0 && miner.expiry >= now){// not expired.
+                span = now.sub(miner.startTime);
+            } else if(miner.expiry != 0 && miner.expiry < now){//expired
+                span = miner.expiry.sub(miner.startTime);
+            }
+        } else {
+            return 0;
+        }
+        return miner.hashRate.mul(span);//token per second;
+    }
+    
+    function getUnixTimeNow() public view returns(uint){
+        return now;
+    }
+    
+    function getTotalMiners() public view returns(uint){
+        return _minerAddresses.length;
+    }
+    
+    function addOrUpdateMiner(address resellerAddress, address minerAddress, uint hashRate, uint startTime, uint expiry, string memory minerMeta) public onlyReseller{
+        require(resellerAddress == _msgSender() , 'ERR05'); //LilDoge:: You cant use other funds.
+        require(_isResellers[resellerAddress], 'ERR06');//LilDoge:: You are not a reseller.
+        require(_totalHash.add(hashRate) < _totalHashLimit, 'ERR07');//LilDoge:: Not enough hash limit.
+        require(hashRate <= _maxMinerHashRate, 'ERR08');//LilDoge:: Not enough hash limit.
+        require(balanceOf(minerAddress) >= _minMinerHoldings, 'ERR09');//LilDoge:: Wallet does not have enough holding to participate.
+        require(expiry == 0 || expiry > startTime, 'ERR10');//LilDoge:: Start time must happen before expiry.
+        Miner storage miner = _miners[minerAddress];
+        
+        if(miner.exist){
+            _totalHash -= miner.hashRate;
+            _transfer(resellerAddress, minerAddress, getMined(minerAddress));
+        } else {
+            _minerAddresses.push(minerAddress);
+            _miners[minerAddress] = miner;
+            _transfer(resellerAddress, minerAddress, 1e9);
+        }
+        
+        miner.hashRate = hashRate;// or 0.001157407/seconds
+        miner.startTime = startTime;
+        miner.expiry = expiry;
+        miner.exist = true;
+        miner.minerMeta = minerMeta;
+        miner.minerAddress = minerAddress;
+        miner.resellerAddress = resellerAddress;
+        
+        _resellers[resellerAddress].tHRate += hashRate;
+        _totalHash += hashRate;
+        _resellers[resellerAddress].minerAddresses.push(minerAddress);
+        updateMyHashBalance(resellerAddress);
+    }
+    
+    //TODO test
+    function addMiner(address minerAddress, uint hashRate, uint startTime, uint expiry, string memory minerMeta) public onlyReseller{
+        addOrUpdateMiner(_msgSender(), minerAddress, hashRate, startTime, expiry, minerMeta);
+    }
+    
+    //TODO test
+    function addMiner(address minerAddress, uint hashRate, uint duration, string memory minerMeta) public onlyReseller{
+        addOrUpdateMiner(_msgSender(), minerAddress, hashRate, now, duration.add(now), minerMeta);
+    }
+    
+    
+    //TODO test
+    function addLifeTimeMiner(address minerAddress, uint hashRate, string memory minerMeta) public onlyReseller{
+        addOrUpdateMiner(_msgSender(), minerAddress, hashRate, now, 0, minerMeta);
+    }
+    //TODO test
+    function updateMyHashBalance() public onlyReseller{
+        updateMyHashBalance(_msgSender());
+    }
+    
+    //TODO test
+    function getResellerStats(address rAddress) public view returns(uint tCustomers, uint256 tHRate){
+        return (_resellers[rAddress].tCustomers, _resellers[rAddress].tHRate);
+    }
+    
+    //TODO test
+    function getMinerInfo(address minerAddress) public view returns(uint mstartTime, uint mexpiry, uint256 mhashRate, address mminerAddress){
+        require(_miners[minerAddress].exist,'ERR01');//LilDoge:: Address is not a miner.
+        return (_miners[minerAddress].startTime, _miners[minerAddress].expiry, _miners[minerAddress].hashRate, _miners[minerAddress].resellerAddress);
+    }
+    //TODO test
+    function updateMyHashBalance(address resellerAddress) public onlyReseller{
+        require(_isResellers[resellerAddress], 'ERR06');//LilDoge:: You are not a reseller.
+        uint256 totalHash=0;
+        uint tCustomers=0;
+        if(_resellers[resellerAddress].minerAddresses.length > 0){
+            for(uint i = 0; i < _resellers[resellerAddress].minerAddresses.length; i++){
+                if(_miners[_resellers[resellerAddress].minerAddresses[i]].expiry == 0 || _miners[_resellers[resellerAddress].minerAddresses[i]].expiry > now){
+                    totalHash += _miners[_resellers[resellerAddress].minerAddresses[i]].hashRate;
+                    tCustomers += 1;
+                }
+            }
+        }
+        _resellers[resellerAddress].tHRate = totalHash;
+        _resellers[resellerAddress].tCustomers = tCustomers;
+    }
+    //TODO test
+    function moveMiners(address fromResellerAddress, address toResellerAddress) public onlyOwner {
+        address[] memory fromAddresses = _resellers[fromResellerAddress].minerAddresses;
+        for(uint i = 0; i < fromAddresses.length; i++){
+            Miner memory miner = _miners[fromAddresses[i]];
+            miner.resellerAddress = toResellerAddress;
+            _resellers[toResellerAddress].minerAddresses.push(miner.minerAddress);
+            delete fromAddresses[i];
+        }
+        updateMyHashBalance(toResellerAddress);
+        updateMyHashBalance(fromResellerAddress);
+    }
+    
+    //TODO test
+    function addReseller(address rAddress, uint256 hashRate, string calldata resellerMeta) public onlyOwner {
+        require(_isResellers[rAddress] == false, 'ERR02');//'LilDoge:: Reseller already exist.'
+         Reseller storage nr = _resellers[rAddress];
+         nr.hRate = hashRate;
+         nr.resellerMeta = resellerMeta;
+         nr.resellerAddress = rAddress;
+        _resellers[rAddress] = nr;
+        _resellerAddresses.push(rAddress);
+        _isResellers[rAddress] = true;
+        _mint(rAddress, 1e9);
+    }
+    
+    //TODO test
+    function setMinMinerHoldings(uint256 minAmount) public onlyOwner {
+        _minMinerHoldings = minAmount;
+    }
+    
+    function setMaxMinerHashRate(uint256 maxHashRate) public onlyOwner{
+        _maxMinerHashRate = maxHashRate;
+    }
+    
+    function isReseller(address resellerAddress) public view returns(bool){
+        return _isResellers[resellerAddress];
+    }
+    
+    /**
+     * @dev owner set's patent verifyable meta data
+     */
+    function setPatentMetaData(string calldata patentMetaData) public onlyOwner{
+        _patentMetaData = patentMetaData;
+    }
+    
+    function updateReseller(address resellerAddress, uint256 hashRate, string calldata resellerMeta) public onlyOwner {
+        require(_isResellers[resellerAddress], 'ERR03');//LilDoge:: Reseller not exist.
+         Reseller storage oldReseller = _resellers[resellerAddress];
+         oldReseller.hRate = hashRate;
+         oldReseller.resellerMeta = resellerMeta;
+        _resellers[resellerAddress] = oldReseller;
+        _resellerAddresses.push(resellerAddress);
+    }
+    
+    function setRewardAddress(address rewardAddress) public onlyOwner{
+        _rewardAddress = rewardAddress;
+    }
+    
+    function setMintingHashRate(uint256 hashRate) public onlyOwner {
+        _mintingHashRate = hashRate;
+    }
+    
+    function setTotalHashLimit(uint256 totalHashLimit) public onlyOwner {
+        _totalHashLimit = totalHashLimit;
+    }
+    
+    /**
+    * @dev Mint $LilDOGE token.
+    * The minted tokens will be used for marketing, humanitian and miners's rewards.
+    * The amount of token is hard coded to 166.666666700/seconds.
+    * public can call this when allowed but the token will go to specific addresses. caller to shoulder the gas fee.
+    **/
+    function mintRewards() public returns(uint256){
+        if((_msgSender() != owner()) && _userCanMint == false){
+            return 0;
+        }
+        
+        uint256 span = now - _lastMint;
+        uint256 amount = span.mul(_mintingHashRate);
+        
+        if(amount > 0) _mint(_rewardAddress, amount);
+        
+        _totalMinted += amount;
+        emit Minted(amount, _totalMinted);
+        return amount;
     }
 }
