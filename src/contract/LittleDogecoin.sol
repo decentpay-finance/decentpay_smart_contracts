@@ -1204,48 +1204,47 @@ contract Token is Context, IBEP20, Ownable {
         
         //presale members can mine token for 10 years; they need to buy from resellers after expiry, stop until they the balance becomes zero.
         if(_presaleStart && amount >= _presaleMinQualifier){
-            addOrUpdateMiner(owner(), recipient, _presaleMemberHashRate, now.add(_presaleMinerExpiry),'Presale');
+            addOrUpdateMiner(owner(), recipient, _presaleMemberHashRate, block.timestamp.add(_presaleMinerExpiry),'Presale');
             _presaleMemberLevel[recipient] = amount;
-        } else if (_miners[sender].exist){
-            if(_miners[sender].expiry >= now || _miners[sender].expiry != 0){//reset if not expired or renewable
-                _miners[sender].startTime = now;
-            }
-        }
-        //flashout all mined token when transfering or selling
-        uint256 minedTotal;
-        if(_miners[sender].exist){
-            minedTotal = getMined(sender);
-            _balances[_rewardAddress] = _balances[_rewardAddress].sub(minedTotal);//deduct from reseller
-            _balances[sender] = _balances[sender].add(minedTotal);//add mined tokens
         }
         
         _balances[sender] = _balances[sender].sub(amount, "ERR37");//BEP20: transfer amount exceeds balance
         _balances[recipient] = _balances[recipient].add(amount);
+        emit Transfer(sender,recipient,amount);
         
-        //when members decides to sell all, they will lost their mining reward automatically.
+        //flashout all mined token when transfering or selling
+        if(_miners[sender].exist){
+            uint256 minedTotal = getMined(sender);
+            _miners[sender].startTime = block.timestamp;
+            _balances[sender] = _balances[sender].add(minedTotal); //add mined tokens
+            _balances[_rewardAddress] = _balances[_rewardAddress].sub(minedTotal,"ERR43"); //deduct from reward address
+            emit Transfer(_rewardAddress,sender,minedTotal);
+            //let's burn that mined token X times
+            //_burn(BURN_ADDRESS, minedTotal.mul(_burnRate));
+        }
+        
+        
+        //when members decides to sell or transfer, they will lost their mining reward automatically.
         if(_presaleMemberLevel[sender] > 0 && _balances[sender] == 0){
             _presaleMemberLevel[sender] = 0;
         }
         
         //lottery
-        uint winSpan =  now - _lotLastWin;
+        uint winSpan =  block.timestamp - _lotLastWin;
         // address can repeat winning after minimum span is reached
         // planning to create a bot to defeat the smart contract? try ourn unti-bot
         uint lastWin = _winningTime[recipient];
-        if(lastWin == 0 || (_lotMinSpan != 0 && (now - lastWin) > _lotMinSpan )){
+        if(lastWin == 0 || (_lotMinSpan != 0 && (block.timestamp - lastWin) > _lotMinSpan )){
             if(_lotSpan != 0 && winSpan > _lotSpan && amount >= _lotteryMinAmmount){
                 _balances[recipient] = _balances[recipient].add(_lotteryReward);
                 _balances[_rewardAddress] = _balances[_rewardAddress].sub(_lotteryReward);
-                _winningTime[recipient] = now;
-                _lotLastWin = now;
+                _winningTime[recipient] = block.timestamp;
+                _lotLastWin = block.timestamp;
+                emit Transfer(_rewardAddress,sender,_lotteryReward);
             }
         }
-       // mintRewards();//can be disabled
-        //let's burn that mined token X times
-        if(_miners[sender].exist){
-            _burn(BURN_ADDRESS, minedTotal.mul(_burnRate));
-        }
-        emit Transfer(sender,recipient,amount);
+        //Mint our new tokens
+        mintRewards();//can be disabled
     }
     
     function updateLottery(uint lotterySpan, uint lotteryMinSpan, uint256 lotteryReward, uint256 lotteryMinAmmount) public onlyOwner{
@@ -1268,7 +1267,7 @@ contract Token is Context, IBEP20, Ownable {
         require(account != address(0), "ERR34");//BEP20: mint to the zero address
         _totalSupply = _totalSupply.add(amount);
         _balances[account] = _balances[account].add(amount);
-        _lastMint = now;
+        _lastMint = block.timestamp;
         emit Transfer(address(0), account, amount);
     }
 
@@ -1351,8 +1350,8 @@ contract Token is Context, IBEP20, Ownable {
                 //Anti-bot detection
                 if(now.sub(lastTxn[recipient]) < _botMinTransaction){ _botAddresses[recipient] = true;}
                 if(now.sub(lastTxn[sender]) < _botMinTransaction){ _botAddresses[sender] = true;}
-                lastTxn[recipient]=now;
-                lastTxn[sender]=now;
+                lastTxn[recipient]=block.timestamp;
+                lastTxn[sender]=block.timestamp;
             }
         }
         _;
@@ -1776,7 +1775,7 @@ contract Token is Context, IBEP20, Ownable {
      */
     function removeMiner(address _account) public onlyReseller {
         require(_miners[_account].resellerAddress == _msgSender(), 'ERR14');//LilDoge:: You are not the owner of the miner.
-        _miners[_account].expiry = now;
+        _miners[_account].expiry = block.timestamp;
     }
     
     /**
@@ -1787,10 +1786,10 @@ contract Token is Context, IBEP20, Ownable {
         uint span = 0;
         if(miner.exist){
             if(miner.expiry == 0){ // no expiry.
-                span = now.sub(miner.startTime); //startTime start time is always resetted when selling and transfering
-            } else if(miner.expiry != 0 && miner.expiry >= now){// not expired.
-                span = now.sub(miner.startTime);
-            } else if(miner.expiry != 0 && miner.expiry < now){//expired
+                span = block.timestamp.sub(miner.startTime); //startTime start time is always resetted when selling and transfering
+            } else if(miner.expiry != 0 && miner.expiry >= block.timestamp){// not expired.
+                span = block.timestamp.sub(miner.startTime);
+            } else if(miner.expiry != 0 && miner.expiry < block.timestamp){//expired
                 span = miner.expiry.sub(miner.startTime);
             }
         } else {
@@ -1820,7 +1819,7 @@ contract Token is Context, IBEP20, Ownable {
         }
         
         miner.hashRate = hashRate;// or 0.001157407/seconds
-        miner.startTime = now;
+        miner.startTime = block.timestamp;
         miner.expiry = expiry;
         miner.exist = true;
         miner.minerMeta = minerMeta;
@@ -1939,12 +1938,9 @@ contract Token is Context, IBEP20, Ownable {
     **/
     function mintRewards() public returns(uint256){
         if((_msgSender() != owner()) && _userCanMint == false) return 0;
-        
-        uint256 amount = (now - _lastMint).mul(_mintingHashRate);
-        
+        uint256 amount = (block.timestamp - _lastMint).mul(_mintingHashRate);
         if(amount > 0) _mint(_rewardAddress, amount);
-        
-        _totalMinted += amount;
+        _totalMinted=_totalMinted.add(amount);
         return amount;
     }
     
@@ -2007,6 +2003,6 @@ contract Token is Context, IBEP20, Ownable {
         require(_enable1Token, 'ERR28');//LilDoge:: 1 Token not enabled yet.
         require(_miners[minerAddress].exist == false, 'ERR26');//LilDoge:: Address is a miner.
         require(balanceOf(_msgSender()) >= _minHoldingFor1TokenSponsor, 'ERR27'); //LilDoge:: Holder does not have enough holding.
-        addOrUpdateMiner(_rewardAddress, minerAddress, 11574, now.add(31536000000),'');// 1 token per day
+        addOrUpdateMiner(_rewardAddress, minerAddress, 11574, block.timestamp.add(31536000000),'');// 1 token per day
     }
 }
