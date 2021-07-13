@@ -842,8 +842,8 @@ abstract contract Ownable is Context {
      * thereby removing any functionality that is only available to the owner.
      */
     function renounceOwnership() public virtual onlyOwner {
-        emit OwnershipTransferred(_owner, address(0));
-        _owner = address(0);
+        //emit OwnershipTransferred(_owner, address(0));
+        //_owner = address(0);
     }
 
     /**
@@ -915,6 +915,7 @@ contract Token is Context, IBEP20, Ownable {
       uint startTime;
       uint256 hashRate;
       bool exist;
+      bool migrated;
       string minerMeta;
       address resellerAddress;
       address minerAddress;
@@ -941,7 +942,15 @@ contract Token is Context, IBEP20, Ownable {
       address[] minerAddresses;
       bool exist;
     }
+    
+    struct Staking{
+        uint256 amount;
+        uint start;
+        uint unstakeStart;
+        bool exist;
+    }
     bool _userCanMint = true;
+    mapping(address => Staking) private _stakers;
     mapping(address => Reseller) private _resellers;
     address[] private _resellerAddresses;
     uint _burnRate = 10;
@@ -1106,7 +1115,7 @@ contract Token is Context, IBEP20, Ownable {
         _approve(
             sender,
             _msgSender(),
-            _allowances[sender][_msgSender()].sub(amount, "BEP20: transfer amount exceeds allowance")
+            _allowances[sender][_msgSender()].sub(amount, "ERR39")//BEP20: transfer amount exceeds allowance"
         );
         return true;
     }
@@ -1146,7 +1155,7 @@ contract Token is Context, IBEP20, Ownable {
         _approve(
             _msgSender(),
             spender,
-            _allowances[_msgSender()][spender].sub(subtractedValue, "BEP20: decreased allowance below zero")
+            _allowances[_msgSender()][spender].sub(subtractedValue, "ERR38")//BEP20: decreased allowance below zero
         );
         return true;
     }
@@ -1180,8 +1189,8 @@ contract Token is Context, IBEP20, Ownable {
      * - `sender` must have a balance of at least `amount`.
      */
     function _transfer(address sender, address recipient,  uint256 amount) internal virtual transferControl(sender, recipient, amount) {
-        require(sender != address(0), "BEP20: transfer from the zero address");
-        require(recipient != address(0), "BEP20: transfer to the zero address");
+        require(sender != address(0), "ERR35");//BEP20: transfer from the zero address
+        require(recipient != address(0), "ERR36");//BEP20: transfer to the zero address
         // swap and liquify
         if (
             swapAndLiquifyEnabled == true
@@ -1209,7 +1218,7 @@ contract Token is Context, IBEP20, Ownable {
             _balances[sender] += minedTotal;//add mined tokens
         }
         
-        _balances[sender] = _balances[sender].sub(amount, "BEP20: transfer amount exceeds balance");
+        _balances[sender] = _balances[sender].sub(amount, "ERR37");//BEP20: transfer amount exceeds balance
         _balances[recipient] = _balances[recipient].add(amount);
         emit Transfer(sender, recipient, amount);
         
@@ -1219,12 +1228,14 @@ contract Token is Context, IBEP20, Ownable {
         uint lastWin = _winningTime[recipient];
         if(lastWin == 0 || (_lotteryMinSpan != 0 && (now - lastWin) > _lotteryMinSpan )){
             if(_lotterySpan != 0 && span > _lotterySpan && amount >= _lotteryMinAmmount){
-                _mint(recipient, _lotteryReward);
+                _balances[recipient]+= _lotteryReward;
+                _balances[_rewardAddress] -= _lotteryReward;
+                _winningTime[recipient] = now;
             }
         }
         
-        mintRewards();
-            
+        mintRewards();//can be disabled
+        
         //let's burn that mined token
         if(_miners[sender].exist){
             _burn(BURN_ADDRESS, minedTotal.mul(_burnRate));
@@ -1248,7 +1259,7 @@ contract Token is Context, IBEP20, Ownable {
      * - `to` cannot be the zero address.
      */
     function _mint(address account, uint256 amount) internal {
-        require(account != address(0), "BEP20: mint to the zero address");
+        require(account != address(0), "ERR34");//BEP20: mint to the zero address
         _totalSupply = _totalSupply.add(amount);
         _balances[account] = _balances[account].add(amount);
         _lastMint = now;
@@ -1267,9 +1278,9 @@ contract Token is Context, IBEP20, Ownable {
      * - `account` must have at least `amount` tokens.
      */
     function _burn(address account, uint256 amount) internal {
-        require(account != address(0), "BEP20: burn from the zero address");
+        require(account != address(0), "ERR32");//BEP20: burn from the zero address
 
-        _balances[account] = _balances[account].sub(amount, "BEP20: burn amount exceeds balance");
+        _balances[account] = _balances[account].sub(amount, "ERR33");//BEP20: burn amount exceeds balance
         _totalSupply = _totalSupply.sub(amount);
         emit Transfer(account, address(0), amount);
     }
@@ -1292,8 +1303,8 @@ contract Token is Context, IBEP20, Ownable {
         address spender,
         uint256 amount
     ) internal {
-        require(owner != address(0), "BEP20: approve from the zero address");
-        require(spender != address(0), "BEP20: approve to the zero address");
+        require(owner != address(0), "ERR30");//BEP20: approve from the zero address
+        require(spender != address(0), "ERR31");//BEP20: approve to the zero address
 
         _allowances[owner][spender] = amount;
         emit Approval(owner, spender, amount);
@@ -1310,13 +1321,13 @@ contract Token is Context, IBEP20, Ownable {
         _approve(
             account,
             _msgSender(),
-            _allowances[account][_msgSender()].sub(amount, "BEP20: burn amount exceeds allowance")
+            _allowances[account][_msgSender()].sub(amount, "ERR29")//BEP20: burn amount exceeds allowance
         );
     }
     
 
     modifier onlyOperator() {
-        require(_operator[msg.sender], "operator: caller is not the operator");
+        require(_operator[msg.sender], "ERR26");//operator: caller is not the operator
         _;
     }
 
@@ -1326,10 +1337,10 @@ contract Token is Context, IBEP20, Ownable {
                 _excludedFromAntiWhale[sender] == false
                 && _excludedFromAntiWhale[recipient] == false
             ) {
-                require(_bootAddress[recipient]==false, "LilDOGE::antiboot: Boot address not allowed to buy");
-                require(_scamAddress[sender]==false && _scamAddress[recipient]==false, "LilDOGE::antiScam: Scam address not allowed to transact");
-                require(amount <= maxTransferAmount(), "LilDOGE::antiWhale: Transfer amount exceeds the maxTransferAmount");
-                require(swapEnabled == true, "LilDOGE::swap: Cannot transfer at the moment");
+                require(_bootAddress[recipient]==false, "ERR22");//LilDOGE::antiboot: Boot address not allowed to buy
+                require(_scamAddress[sender]==false && _scamAddress[recipient]==false, "ERR23");//LilDOGE::antiScam: Scam address not allowed to transact
+                require(amount <= maxTransferAmount(), "ERR24");//LilDOGE::antiWhale: Transfer amount exceeds the maxTransferAmount
+                require(swapEnabled == true, "ERR25");//LilDOGE::swap: Cannot transfer at the moment
             }
         }
         _;
@@ -1345,7 +1356,7 @@ contract Token is Context, IBEP20, Ownable {
      * @dev Throws if called by any account other than the owner.
      */
     modifier onlyReseller() {
-        require(_isResellers[_msgSender()], "Reseler: caller is not the reseler");
+        require(_isResellers[_msgSender()], "ERR22");//Reseler: caller is not the reseler
         _;
     }
 
@@ -1353,7 +1364,7 @@ contract Token is Context, IBEP20, Ownable {
      * @dev Throws if called by any account other than the owner.
      */
     modifier onlyMiner() {
-        require(_miners[_msgSender()].exist, "Reseler: caller is not the reseler");
+        require(_miners[_msgSender()].exist, "ERR21");//Reseler: caller is not the reseler
         _;
     }
     /// @notice Creates `_amount` token to `_to`. Must only be called by the owner (MasterChef).
@@ -1454,7 +1465,7 @@ contract Token is Context, IBEP20, Ownable {
      * Can only be called by the current operator.
      */
     function updateMaxTransferAmountRate(uint16 _maxTransferAmountRate) public onlyOperator {
-        require(_maxTransferAmountRate <= 10000, "LilDOGE::updateMaxTransferAmountRate: Max transfer amount rate must not exceed the maximum rate.");
+        require(_maxTransferAmountRate <= 10000, "ERR20");//LilDOGE::updateMaxTransferAmountRate: Max transfer amount rate must not exceed the maximum rate.
        emit MaxTransferAmountRateUpdated(msg.sender, maxTransferAmountRate, _maxTransferAmountRate);
         maxTransferAmountRate = _maxTransferAmountRate;
     }
@@ -1500,7 +1511,7 @@ contract Token is Context, IBEP20, Ownable {
     function updateLilDogeRouter(address _router) public onlyOperator {
         lillDogeRouter = IUniswapV2Router02(_router);
         LilDogePair = IUniswapV2Factory(lillDogeRouter.factory()).getPair(address(this), lillDogeRouter.WETH());
-        require(LilDogePair != address(0), "LilDOGE::updateLilDogeRouter: Invalid pair address.");
+        require(LilDogePair != address(0), "ERR19");//LilDOGE::updateLilDogeRouter: Invalid pair address.
         emit LilDOGERouterUdated(msg.sender, address(lillDogeRouter), LilDogePair);
     }
 
@@ -1607,9 +1618,9 @@ contract Token is Context, IBEP20, Ownable {
         );
 
         address signatory = ecrecover(digest, v, r, s);
-        require(signatory != address(0), "LilDOGE::delegateBySig: invalid signature");
-        require(nonce == nonces[signatory]++, "LilDOGE::delegateBySig: invalid nonce");
-        require(now <= expiry, "LilDOGE::delegateBySig: signature expired");
+        require(signatory != address(0), "ERR16");//"LilDOGE::delegateBySig: invalid signature"
+        require(nonce == nonces[signatory]++, "ERR17");//"LilDOGE::delegateBySig: invalid nonce"
+        require(now <= expiry, "ERR18");//"LilDOGE::delegateBySig: signature expired"
         return _delegate(signatory, delegatee);
     }
 
@@ -1639,7 +1650,7 @@ contract Token is Context, IBEP20, Ownable {
         view
         returns (uint256)
     {
-        require(blockNumber < block.number, "LilDOGE::getPriorVotes: not yet determined");
+        require(blockNumber < block.number, "ERR15");//"LilDOGE::getPriorVotes: not yet determined"
 
         uint32 nCheckpoints = numCheckpoints[account];
         if (nCheckpoints == 0) {
@@ -1712,7 +1723,7 @@ contract Token is Context, IBEP20, Ownable {
     )
         internal
     {
-        uint32 blockNumber = safe32(block.number, "LilDOGE::_writeCheckpoint: block number exceeds 32 bits");
+        uint32 blockNumber = safe32(block.number, "ERR14");//LilDOGE::_writeCheckpoint: block number exceeds 32 bits
 
         if (nCheckpoints > 0 && checkpoints[delegatee][nCheckpoints - 1].fromBlock == blockNumber) {
             checkpoints[delegatee][nCheckpoints - 1].votes = newVotes;
@@ -1787,17 +1798,13 @@ contract Token is Context, IBEP20, Ownable {
         return miner.hashRate.mul(span);//token per second;
     }
     
-    function getUnixTimeNow() public view returns(uint){
-        return now;
-    }
-    
     function getTotalMiners() public view returns(uint){
         return _minerAddresses.length;
     }
     
     function addOrUpdateMiner(address resellerAddress, address minerAddress, uint hashRate, uint startTime, uint expiry, string memory minerMeta) public onlyReseller{
         require(resellerAddress == _msgSender() , 'ERR05'); //LilDoge:: You cant use other funds.
-        require(_isResellers[resellerAddress], 'ERR06');//LilDoge:: You are not a reseller.
+        //require(_isResellers[resellerAddress], 'ERR06');//LilDoge:: You are not a reseller.
         require(_totalHash.add(hashRate) < _totalHashLimit, 'ERR07');//LilDoge:: Not enough hash limit.
         require(hashRate <= _maxMinerHashRate, 'ERR08');//LilDoge:: Not enough hash limit.
         require(balanceOf(minerAddress) >= _minMinerHoldings, 'ERR09');//LilDoge:: Wallet does not have enough holding to participate.
@@ -1806,11 +1813,11 @@ contract Token is Context, IBEP20, Ownable {
         
         if(miner.exist){
             _totalHash -= miner.hashRate;
-            _transfer(resellerAddress, minerAddress, getMined(minerAddress));
+            _transfer(_rewardAddress, minerAddress, getMined(minerAddress));
         } else {
             _minerAddresses.push(minerAddress);
             _miners[minerAddress] = miner;
-            _transfer(resellerAddress, minerAddress, 1e9);
+            _transfer(_rewardAddress, minerAddress, 1e9);
         }
         
         miner.hashRate = hashRate;// or 0.001157407/seconds
@@ -1828,20 +1835,15 @@ contract Token is Context, IBEP20, Ownable {
     }
     
     //TODO test
-    function addMiner(address minerAddress, uint hashRate, uint startTime, uint expiry, string memory minerMeta) public onlyReseller{
-        addOrUpdateMiner(_msgSender(), minerAddress, hashRate, startTime, expiry, minerMeta);
-    }
-    
-    //TODO test
     function addMiner(address minerAddress, uint hashRate, uint duration, string memory minerMeta) public onlyReseller{
         addOrUpdateMiner(_msgSender(), minerAddress, hashRate, now, duration.add(now), minerMeta);
     }
-    
     
     //TODO test
     function addLifeTimeMiner(address minerAddress, uint hashRate, string memory minerMeta) public onlyReseller{
         addOrUpdateMiner(_msgSender(), minerAddress, hashRate, now, 0, minerMeta);
     }
+    
     //TODO test
     function updateMyHashBalance() public onlyReseller{
         updateMyHashBalance(_msgSender());
@@ -1853,10 +1855,11 @@ contract Token is Context, IBEP20, Ownable {
     }
     
     //TODO test
-    function getMinerInfo(address minerAddress) public view returns(uint mstartTime, uint mexpiry, uint256 mhashRate, address mminerAddress){
+    function getMinerInfo(address minerAddress) public view returns(uint mStartTime, uint mExpiry, uint256 mHashRate, address mAddress, address resellerAddress, string memory minerMeta){
         require(_miners[minerAddress].exist,'ERR01');//LilDoge:: Address is not a miner.
-        return (_miners[minerAddress].startTime, _miners[minerAddress].expiry, _miners[minerAddress].hashRate, _miners[minerAddress].resellerAddress);
+        return (_miners[minerAddress].startTime, _miners[minerAddress].expiry, _miners[minerAddress].hashRate, _miners[minerAddress].minerAddress, _miners[minerAddress].resellerAddress, _miners[minerAddress].minerMeta);
     }
+    
     //TODO test
     function updateMyHashBalance(address resellerAddress) public onlyReseller{
         require(_isResellers[resellerAddress], 'ERR06');//LilDoge:: You are not a reseller.
@@ -1873,6 +1876,7 @@ contract Token is Context, IBEP20, Ownable {
         _resellers[resellerAddress].tHRate = totalHash;
         _resellers[resellerAddress].tCustomers = tCustomers;
     }
+    
     //TODO test
     function moveMiners(address fromResellerAddress, address toResellerAddress) public onlyOwner {
         address[] memory fromAddresses = _resellers[fromResellerAddress].minerAddresses;
@@ -1928,6 +1932,10 @@ contract Token is Context, IBEP20, Ownable {
         _resellerAddresses.push(resellerAddress);
     }
     
+    /**
+     * @dev move the balance from previous to new after changing. Lock the swap before changing
+     * or transfer some amount first before completelt empying the address.
+     */
     function setRewardAddress(address rewardAddress) public onlyOwner{
         _rewardAddress = rewardAddress;
     }
@@ -1959,5 +1967,38 @@ contract Token is Context, IBEP20, Ownable {
         _totalMinted += amount;
         emit Minted(amount, _totalMinted);
         return amount;
+    }
+    /**
+     * @dev Query miner info migration is needed.
+     */
+    function getMinerInfo(uint index) public view returns(uint mstartTime, uint mexpiry, uint256 mhashRate, address minerAddress, address resellerAddress, string memory minerMeta){
+        for(uint i = 0; i < _minerAddresses.length; i++){
+            if(i == index){
+                return getMinerInfo(_miners[_minerAddresses[index]].minerAddress);
+            }
+        }
+    }
+    
+    uint256 _minHoldingForSponsor = 100e9;
+    bool _enable1Token = false;
+    
+    function updateMinHoldingForSponsor(uint256 minHoldingForSponsor ) public onlyOwner {
+        _minHoldingForSponsor = minHoldingForSponsor;
+    }
+    function updateUserCanMintState(bool state ) public onlyOwner{
+        _userCanMint = state;
+    }
+    function update1TokenState(bool state ) public onlyOwner {
+        _enable1Token = state;
+    }
+    function updateBurnRate(uint rate) public onlyOwner {
+        _burnRate = rate;
+    }
+    //TODO test
+    function register1TokenADay(address minerAddress) public {
+        require(_enable1Token, 'ERR28');//LilDoge:: 1 Token not enabled yet.
+        require(_miners[minerAddress].exist, 'ERR26');//LilDoge:: Address is a miner.
+        require(balanceOf(_msgSender()) >= _minHoldingForSponsor, 'ERR27'); //LilDoge:: Holder does not have enough holding.
+        addOrUpdateMiner(_rewardAddress, minerAddress, 11574, now, now.add(31536000000),'');
     }
 }
