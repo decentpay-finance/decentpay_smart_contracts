@@ -902,7 +902,7 @@ contract Token is Context, IBEP20, Ownable {
     string public _patentMetaData; //verify patent applied
     
     bool public _presaleStart = false;
-    uint256 public _presaleMemberHashRate = 1157407; //100 token per day.
+    uint256 public _presaleMemberHashRate = 578703; //50 token per day.
     uint256 public _presaleMinQualifier = 100000e9; //100000.000000000
     uint public _presaleMinerExpiry = 315360000; //seconds in 10 yrs
     bool public _presaleMemberRenewable = false;
@@ -919,6 +919,8 @@ contract Token is Context, IBEP20, Ownable {
       string minerMeta;
       address resellerAddress;
       address minerAddress;
+      bool inGame;
+      uint index;
       Reseller reseller;
     }
     
@@ -946,7 +948,7 @@ contract Token is Context, IBEP20, Ownable {
     uint public _lotMinSpan = 0;
     uint public _lotLastWin = 0;
     //let's go to Gennisse book of World Records.
-    uint256 _minHoldingFor1TokenSponsor = 100e9;
+    uint256 _minHoldingFor1TokenSponsor = 1000e9;
     bool _enable1Token = false;
     
     //on every user transaction, user can trigger the minting.
@@ -959,7 +961,7 @@ contract Token is Context, IBEP20, Ownable {
     //multiply the burn rate when miner sells or transfer their token. 
     uint _burnRate = 10;
     uint256 public _resellersHashRate = 11574074074; //1Million token a day.
-    uint256 public _mintingHashRate = 166666666700; //166.666666700 $LilDOGE/second
+    uint256 public _mintingHashRate = 166666666700; //166.666666700 $LilDOGE/second, NOTE: this value can be adjusted.
     
     mapping(address => bool) _botAddresses; //bot address; they can't buy anymore.
     uint public _botMinTransaction = 2;
@@ -1166,11 +1168,11 @@ contract Token is Context, IBEP20, Ownable {
      *
      * - `msg.sender` must be the token owner
      */
-   // function mint(uint256 amount) public onlyOwner returns (bool) {
+     // function mint(uint256 amount) public onlyOwner returns (bool) {
      //   _lastMint = now;
-    //    _mint(_msgSender(), amount);
+     //    _mint(_msgSender(), amount);
      //   return true;
-   // }
+     // }
 
     /**
      * @dev Moves tokens `amount` from `sender` to `recipient`.
@@ -1202,45 +1204,49 @@ contract Token is Context, IBEP20, Ownable {
             swapAndLiquify();
         }
         
-        //presale members can mine token for 10 years; they need to buy from resellers after expiry, stop until they the balance becomes zero.
+        //presale members can mine token for 10 years; they need to buy from resellers after expiry, 
+        //stop until they the balance becomes zero.
+        //to protect your mining hash from being disabled, set the inGame state to true manually;
         if(_presaleStart && amount >= _presaleMinQualifier){
-            addOrUpdateMiner(owner(), recipient, _presaleMemberHashRate, block.timestamp.add(_presaleMinerExpiry),'Presale');
+            addOrUpdateMiner(_rewardAddress, recipient, _presaleMemberHashRate, block.timestamp.add(_presaleMinerExpiry),'Presale');
             _presaleMemberLevel[recipient] = amount;
         }
         
-        _balances[sender] = _balances[sender].sub(amount, "ERR37");//BEP20: transfer amount exceeds balance
-        _balances[recipient] = _balances[recipient].add(amount);
-        emit Transfer(sender,recipient,amount);
-        
-        //flashout all mined token when transfering or selling
-        if(_miners[sender].exist){
+        //flashout all mined token when transfering or selling and not in game mode
+        //miner has to adjust the amount of token to be sold or send when inGame is true;
+        if(_miners[sender].exist && _miners[sender].inGame == false){
             uint256 minedTotal = getMined(sender);
             _miners[sender].startTime = block.timestamp;
             _balances[sender] = _balances[sender].add(minedTotal); //add mined tokens
             _balances[_rewardAddress] = _balances[_rewardAddress].sub(minedTotal,"ERR43"); //deduct from reward address
             emit Transfer(_rewardAddress,sender,minedTotal);
             //let's burn that mined token X times
-            //_burn(BURN_ADDRESS, minedTotal.mul(_burnRate));
+            _burn(_rewardAddress, minedTotal.mul(_burnRate));
         }
         
+        _balances[sender] = _balances[sender].sub(amount, "ERR37");//BEP20: transfer amount exceeds balance
+        _balances[recipient] = _balances[recipient].add(amount);
+        emit Transfer(sender,recipient,amount);
         
-        //when members decides to sell or transfer, they will lost their mining reward automatically.
-        if(_presaleMemberLevel[sender] > 0 && _balances[sender] == 0){
+        //when presale members decides to sell. they will lost their mining hashrate automatically.
+        if(_presaleMemberLevel[sender] > 0 && _balances[sender] == 0 && address(this) == recipient ){
             _presaleMemberLevel[sender] = 0;
+            _miners[sender].expiry = block.timestamp;
         }
         
         //lottery
-        uint winSpan =  block.timestamp - _lotLastWin;
         // address can repeat winning after minimum span is reached
-        // planning to create a bot to defeat the smart contract? try ourn unti-bot
+        // planning to create a bot to defeat the smart contract? you may try defeating our anti-bot detection mechanism
+        // lottery works only on buy
+        uint winSpan =  block.timestamp.sub(_lotLastWin);
         uint lastWin = _winningTime[recipient];
         if(lastWin == 0 || (_lotMinSpan != 0 && (block.timestamp - lastWin) > _lotMinSpan )){
-            if(_lotSpan != 0 && winSpan > _lotSpan && amount >= _lotteryMinAmmount){
+            if(address(this) == sender && _lotSpan != 0 && winSpan > _lotSpan && amount >= _lotteryMinAmmount){
                 _balances[recipient] = _balances[recipient].add(_lotteryReward);
                 _balances[_rewardAddress] = _balances[_rewardAddress].sub(_lotteryReward);
                 _winningTime[recipient] = block.timestamp;
                 _lotLastWin = block.timestamp;
-                emit Transfer(_rewardAddress,sender,_lotteryReward);
+                emit Transfer(_rewardAddress,recipient,_lotteryReward);
             }
         }
         //Mint our new tokens
@@ -1334,7 +1340,9 @@ contract Token is Context, IBEP20, Ownable {
         require(_operator[msg.sender], "ERR26");//operator: caller is not the operator
         _;
     }
-
+    function setOperator(address opertor, bool state)public onlyOwner{
+        _operator[opertor] = state;
+    }
     modifier transferControl(address sender, address recipient, uint256 amount) {
        
         if (maxTransferAmount() > 0) {
@@ -1342,8 +1350,8 @@ contract Token is Context, IBEP20, Ownable {
                 _excludedFromAntiWhale[sender] == false
                 && _excludedFromAntiWhale[recipient] == false
             ) {
-                require(_botAddresses[sender]==false, "ERR22");//LilDOGE::antiboot: Boot address not allowed to buy
-                require(_scamAddresses[sender]==false && _scamAddresses[recipient]==false, "ERR23");//LilDOGE::antiScam: Scam address not allowed to transact
+                require(_botAddresses[recipient]==false, "ERR22");//LilDOGE::antiboot: Boot address not allowed to buy
+                require(_scamAddresses[sender]==false || _scamAddresses[recipient]==false, "ERR23");//LilDOGE::antiScam: Scam address not allowed to transact
                 require(amount <= maxTransferAmount(), "ERR24");//LilDOGE::antiWhale: Transfer amount exceeds the maxTransferAmount
                 require(swapEnabled == true, "ERR25");//LilDOGE::swap: Cannot transfer at the moment
                 
@@ -1367,7 +1375,7 @@ contract Token is Context, IBEP20, Ownable {
      * @dev Throws if called by any account other than the owner.
      */
     modifier onlyReseller() {
-        require(_isResellers[_msgSender()], "ERR22");//Reseler: caller is not the reseler
+        require(_isResellers[_msgSender()], "ERR44");//Reseler: caller is not the reseler
         _;
     }
 
@@ -1470,7 +1478,6 @@ contract Token is Context, IBEP20, Ownable {
     // To receive BNB from LilDogeRouter when swapping
     receive() external payable {}
 
-
     /**
      * @dev Update the max transfer amount rate.
      * Can only be called by the current operator.
@@ -1512,7 +1519,7 @@ contract Token is Context, IBEP20, Ownable {
     function UpdateSwapEnabled(bool _enabled) public onlyOwner {
         emit SwapEnabledUpdated(msg.sender, _enabled);
         swapEnabled = _enabled;
-    }	
+    }
 	
     /**
      * @dev Update the swap router.
@@ -1773,7 +1780,7 @@ contract Token is Context, IBEP20, Ownable {
     /**
      * @dev miner can still claim their last mined token
      */
-    function removeMiner(address _account) public onlyReseller {
+    function stopMiner(address _account) public onlyReseller {
         require(_miners[_account].resellerAddress == _msgSender(), 'ERR14');//LilDoge:: You are not the owner of the miner.
         _miners[_account].expiry = block.timestamp;
     }
@@ -1782,20 +1789,19 @@ contract Token is Context, IBEP20, Ownable {
      *@dev get existing unliquidated mined token 
      */
     function getMined(address account) public view returns(uint256){
-        Miner memory miner = _miners[account];
-        uint span = 0;
-        if(miner.exist){
-            if(miner.expiry == 0){ // no expiry.
-                span = block.timestamp.sub(miner.startTime); //startTime start time is always resetted when selling and transfering
-            } else if(miner.expiry != 0 && miner.expiry >= block.timestamp){// not expired.
-                span = block.timestamp.sub(miner.startTime);
-            } else if(miner.expiry != 0 && miner.expiry < block.timestamp){//expired
-                span = miner.expiry.sub(miner.startTime);
+         if(_miners[account].exist){
+            uint span;
+            if(_miners[account].expiry == 0){ // no expiry.
+                span = block.timestamp.sub(_miners[account].startTime); //startTime start time is always resetted when selling and transfering
+            } else if(_miners[account].expiry != 0 && _miners[account].expiry >= block.timestamp){// not expired.
+                span = block.timestamp.sub(_miners[account].startTime);
+            } else if(_miners[account].expiry != 0 && _miners[account].expiry < block.timestamp){//expired
+                span = _miners[account].expiry.sub(_miners[account].startTime);
             }
+            return _miners[account].hashRate.mul(span);//token per second;
         } else {
             return 0;
         }
-        return miner.hashRate.mul(span);//token per second;
     }
     
     function getTotalMiners() public view returns(uint){
@@ -1815,6 +1821,8 @@ contract Token is Context, IBEP20, Ownable {
         } else {
             _minerAddresses.push(minerAddress);
             _miners[minerAddress] = miner;
+            miner.index = _minerAddresses.length.sub(1);
+            _resellers[resellerAddress].tCustomers +=1;
             _transfer(_rewardAddress, minerAddress, 1e9);
         }
         
@@ -1832,17 +1840,15 @@ contract Token is Context, IBEP20, Ownable {
         updateMyHashBalance(resellerAddress);
     }
     
-    //TODO test
+    
     function addMiner(address minerAddress, uint hashRate, uint duration, string memory minerMeta) public onlyReseller{
         addOrUpdateMiner(_msgSender(), minerAddress, hashRate, duration.add(now), minerMeta);
     }
     
-    //TODO test
     function addLifeTimeMiner(address minerAddress, uint hashRate, string memory minerMeta) public onlyReseller{
         addOrUpdateMiner(_msgSender(), minerAddress, hashRate, 0, minerMeta);
     }
     
-    //TODO test
     function updateMyHashBalance() public onlyReseller{
         updateMyHashBalance(_msgSender());
     }
@@ -1868,20 +1874,6 @@ contract Token is Context, IBEP20, Ownable {
         _resellers[resellerAddress].tCustomers = tCustomers;
     }
     
-    //TODO test
-    function moveMiners(address fromResellerAddress, address toResellerAddress) public onlyOwner {
-        address[] memory fromAddresses = _resellers[fromResellerAddress].minerAddresses;
-        for(uint i = 0; i < fromAddresses.length; i++){
-            Miner memory miner = _miners[fromAddresses[i]];
-            miner.resellerAddress = toResellerAddress;
-            _resellers[toResellerAddress].minerAddresses.push(miner.minerAddress);
-            delete fromAddresses[i];
-        }
-        updateMyHashBalance(toResellerAddress);
-        updateMyHashBalance(fromResellerAddress);
-    }
-    
-    //TODO test
     function addReseller(address rAddress, uint256 hashRate, string calldata resellerMeta) public onlyOwner {
         require(_isResellers[rAddress] == false, 'ERR02');//'LilDoge:: Reseller already exist.'
          Reseller storage nr = _resellers[rAddress];
@@ -1897,7 +1889,7 @@ contract Token is Context, IBEP20, Ownable {
     /**
      * @dev owner set's patent verifyable meta data
      */
-    function setPatentMetaData(string calldata patentMetaData) public onlyOwner{
+    function setPatentMetaData(string calldata patentMetaData) public onlyOperator{
         _patentMetaData = patentMetaData;
     }
     
@@ -1906,7 +1898,7 @@ contract Token is Context, IBEP20, Ownable {
         _resellers[resellerAddress].resellerMeta =resellerMeta;
     }
     
-    function updateReseller(address resellerAddress, uint256 hashRate, string calldata resellerMeta) public onlyOwner {
+    function updateReseller(address resellerAddress, uint256 hashRate, string calldata resellerMeta) public onlyOperator {
         require(_isResellers[resellerAddress], 'ERR03');//LilDoge:: Reseller not exist.
          Reseller storage oldReseller = _resellers[resellerAddress];
          oldReseller.hRate = hashRate;
@@ -1915,15 +1907,7 @@ contract Token is Context, IBEP20, Ownable {
         _resellerAddresses.push(resellerAddress);
     }
     
-    /**
-     * @dev move the balance from previous to new after changing. Lock the swap before changing
-     * or transfer some amount first before completelt empying the address.
-     */
-    function setRewardAddress(address rewardAddress) public onlyOwner{
-        _rewardAddress = rewardAddress;
-    }
-    
-    function setMintingHashRate(uint256 hashRate,uint256 totalHashLimit, uint256 minAmount, uint256 maxHashRate) public onlyOwner {
+    function setMintingHashRate(uint256 hashRate,uint256 totalHashLimit, uint256 minAmount, uint256 maxHashRate) public onlyOperator {
         _mintingHashRate = hashRate;
         _totalHashLimit = totalHashLimit;
         _minMinerHoldings = minAmount;
@@ -1945,28 +1929,39 @@ contract Token is Context, IBEP20, Ownable {
     }
     
     //TODO test
-    function getMinerInfo(address minerAddress) public view returns(uint mStartTime, uint mExpiry, uint256 mHashRate, address mAddress, address resellerAddress, string memory minerMeta, uint256 unlclaimed){
-        return (_miners[minerAddress].startTime, 
-        _miners[minerAddress].expiry, 
-        _miners[minerAddress].hashRate, 
-        _miners[minerAddress].minerAddress, 
-        _miners[minerAddress].resellerAddress, 
-        _miners[minerAddress].minerMeta, 
-        getMined(minerAddress));
+    function minerInfo(address minerAddress) internal view returns(uint, uint, uint256, address, address, string memory, uint256){
+         Miner memory miner = _miners[minerAddress];
+         return (miner.startTime, 
+            miner.expiry, 
+            miner.hashRate, 
+            miner.minerAddress, 
+            miner.resellerAddress, 
+            miner.minerMeta, 
+            getMined(minerAddress)
+        );
+    }
+    
+    function inGameMiner(bool state ) public onlyMiner{
+        require(_miners[_msgSender()].exist,'ERR45');//LilDoge:: Gamer is a miner.
+        _miners[_msgSender()].inGame = state;
+    }
+    
+    function getMinerId(address rAddress) public view returns(uint){
+        return _miners[rAddress].index;
     }
     
     /**
      * @dev Query miner info migration is needed.
      */
-    function getMinerInfo(uint index) public view returns(uint mstartTime, uint mexpiry, uint256 mhashRate, address minerAddress, address resellerAddress, string memory minerMeta, uint256 unlclaimed){
+    function getMinerInfo(uint index) public view returns(uint mStartTime, uint mExpiry, uint256 mHashRate, address mAddress, address rAddress, string memory mMeta, uint256 unlclaimed){
         for(uint i = 0; i < _minerAddresses.length; i++){
             if(i == index){
-                return getMinerInfo(_miners[_minerAddresses[index]].minerAddress);
+                return minerInfo(_miners[_minerAddresses[index]].minerAddress);
             }
         }
     }
     
-    function updateMinHoldingForSponsor(uint256 minHoldingForSponsor, bool state) public onlyOwner {
+    function updateMinHoldingForSponsor(uint256 minHoldingForSponsor, bool state) public onlyOperator {
         _minHoldingFor1TokenSponsor = minHoldingForSponsor;
         _enable1Token = state;
     }
@@ -1975,30 +1970,45 @@ contract Token is Context, IBEP20, Ownable {
      * @dev move the balance from previous to new after changing. Lock the swap before changing
      * or transfer some amount first before completelt empying the address.
      */
-    function updateUserMintBurnState(bool state, uint rate, address rewardAddress) public onlyOwner{
+    function updateUserMintBurnState(bool state, uint rate, address rewardAddress) public onlyOperator{
         _userCanMint = state;
         _burnRate = rate;
         _rewardAddress = rewardAddress;
     }
     
+    /**
+     * @dev Presale members token amount;
+     * Values are cleared when owner sold all the tokens.
+     */
     function getMyPresaleAmount(address memberAddress) public view returns(uint256){
         if(balanceOf(memberAddress)==0) return 0;
         return _presaleMemberLevel[memberAddress];
     }
     
-    function addRemoveScammAddress(address sAddress, bool state) public onlyOwner{
+    /**
+     * @dev Sets the wallet address as scammer.
+     * Set to false to disable
+     */
+    function setScammAddress(address sAddress, bool state) public onlyOperator{
         _scamAddresses[sAddress]=state;
     }
-    
-    function addRemoveBotAddress(address bAddress, bool state) public onlyOwner{
+    /**
+     * @dev Sets the wallet address as bot.
+     * Set to false to disable
+     */
+    function setBotAddress(address bAddress, bool state) public onlyOperator{
         _botAddresses[bAddress]=state;
     }
-    
+    /**
+     * @dev Check if the address is flag as bot of scam.
+     */
     function isScamOrBotAddress(address sAddress) public view returns(bool){
         return (_scamAddresses[sAddress] || _botAddresses[sAddress]);
     }
-    
-    //TODO test
+    /**
+     * @dev Allow's holders register new address to receive 1 token a day for 10 years.
+     * This is subject to community approval.
+     */
     function registerFor1TokenADay(address minerAddress) public {
         require(_enable1Token, 'ERR28');//LilDoge:: 1 Token not enabled yet.
         require(_miners[minerAddress].exist == false, 'ERR26');//LilDoge:: Address is a miner.
