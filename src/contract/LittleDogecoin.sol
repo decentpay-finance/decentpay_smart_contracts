@@ -1778,7 +1778,9 @@ contract Token is Context, IBEP20, Ownable {
      */
     function stopMiner(address _account) public onlyReseller {
         require(_miners[_account].resellerAddress == _msgSender(), 'ERR14');//LilDoge:: You are not the owner of the miner.
+        require(_miners[_account].expiry > 0, 'ERR46');//LilDoge:: Miner is set as lifetime Owner.
         _miners[_account].expiry = block.timestamp;
+        _resellers[_miners[_account].resellerAddress].hRate -= _miners[_account].hashRate;
     }
     
     /**
@@ -1804,7 +1806,7 @@ contract Token is Context, IBEP20, Ownable {
         return _minerAddresses.length;
     }
     
-    function addOrUpdateMiner(address resellerAddress, address minerAddress, uint hashRate, uint expiry, string memory minerMeta) public onlyReseller{
+    function addOrUpdateMiner(address resellerAddress, address minerAddress, uint256 hashRate, uint expiry, string memory minerMeta) public onlyReseller{
         require(_totalHash.add(hashRate) < _totalHashLimit, 'ERR07');//LilDoge:: Not enough hash limit.
         require(hashRate <= _maxMinerHashRate, 'ERR08');//LilDoge:: Not enough hash limit.
         require(balanceOf(minerAddress) >= _minMinerHoldings, 'ERR09');//LilDoge:: Wallet does not have enough holding to participate.
@@ -1812,6 +1814,8 @@ contract Token is Context, IBEP20, Ownable {
         
         if(miner.exist){
             require((_miners[minerAddress].resellerAddress == _msgSender()) || resellerAddress == owner(),'ERR42'); //LilDoge:: Miner is owned by another seller.
+            require(_miners[minerAddress].expiry == 0 && _miners[minerAddress].hashRate <= hashRate,'ERR47'); //LilDoge:: Miner is lifetime owner you cant lower down the hashrate.
+            require(_miners[minerAddress].expiry == 0 && expiry==0,'ERR48'); //LilDoge:: Miner is lifetime owner you cant set the expiry other than zero.
             _totalHash = _totalHash.sub(miner.hashRate);
             _transfer(_rewardAddress, minerAddress, getMined(minerAddress));
         } else {
