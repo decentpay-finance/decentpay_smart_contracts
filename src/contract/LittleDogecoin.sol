@@ -856,7 +856,54 @@ abstract contract Ownable is Context {
         _owner = newOwner;
     }
 }
-
+contract Resellable is Context {
+    address[] _resellerAddresses;
+    mapping(address => Reseller) _resellers; // For merchant
+    
+    struct Reseller{
+      uint256 tMinted; // totalMinted
+      uint256 hRate; // hashRate
+      uint256 tHRate; //totalHashRate
+      uint256 tCustomers; //totalCustomers
+      string resellerMeta;  //stores reseller 
+      //address resellerAddress;
+      //address[] minerAddresses;
+      bool exist;
+    }
+    uint256 public _totalHashLimit = 115740740740;//10M Token perday max
+    uint256 public _totalHash; //running number
+    uint256 public _totalResellerHash; //running number
+}
+contract Minable is Context {
+    
+    // limits 
+    uint256 _maxMinerHashRate = 5787037; //0.005787037 per second
+    uint256 _minMinerHoldings = 1000e9; //minimum token miner needs to hold before registration.
+    uint256 _newResellerMinerReward = 1e9;// New resellers and miner initial reward
+    uint _maxBostDuration;
+    uint _maxBostHashRate;
+    bool _enableAddUpdateMiner = true;
+    struct Miner {
+      uint expiry;
+      uint startTime;
+      uint256 hashRate;
+      uint256 totalClaimed;
+      bool exist;
+      string minerMeta;
+      address resellerAddress;
+      address minerAddress;
+      bool isLocked;
+      uint boostStart;
+      uint boostExpiry;
+      uint256 boostHashRate;
+      bool isBoosted;
+    }
+    
+    mapping(address => Miner) _miners;// For uses
+    address[] _minerAddresses;
+    mapping(address => bool) _excemptedFromMining; 
+    uint256 _totalBurnedByMiners; //running number
+}
 // File: contracts/libs/BEP20.sol
 
 pragma solidity >=0.4.0;
@@ -885,7 +932,7 @@ pragma solidity >=0.4.0;
  * functions have been added to mitigate the well-known issues around setting
  * allowances. See {IBEP20-approve}.
  */
-contract Token is Context, IBEP20, Ownable {
+contract Token is Context, IBEP20, Ownable, Minable, Resellable{
     using SafeMath for uint256;
     using Address for address;
 
@@ -900,73 +947,27 @@ contract Token is Context, IBEP20, Ownable {
     uint256 public _totalMinted;
     string public _patentMetaData; //verify patent applied
     
-    bool public _presaleStart = false;
+    bool public _inPresale = false;
     uint256 public _presaleMemberHashRate = 578703; //50 token per day.
     uint256 public _presaleMinQualifier = 100000e9; //100000.000000000
     uint public _presaleMinerExpiry = 315360000; //seconds in 10 yrs
     address public _rewardAddress; // stores all the minted tokens.
     
-    // limits 
-    uint256 public _maxMinerHashRate = 5787037; //0.005787037 per second
-    uint256 public _minMinerHoldings = 1000e9; //minimum token miner needs to hold before registration.
-    uint256 public _newResellerMinerReward = 1e9;// New resellers and miner initial reward
-    uint public _maxBostDuration;
-    uint public _maxBostHashRate;
-    uint256 public _buyBoostHashRate;
-    uint256 public _buyBoostDuration;
-    uint256 public _buyBoostLimit;
-    struct Miner {
-      uint expiry;
-      uint startTime;
-      uint256 hashRate;
-      uint256 totalClaimed;
-      bool exist;
-      string minerMeta;
-      address resellerAddress;
-      address minerAddress;
-      bool isLocked;
-      uint index;
-      uint boostStart;
-      uint boostExpiry;
-      uint256 boostHashRate;
-      bool isBoosted;
-      Reseller reseller;
-    }
-    
-    address[] private _minerAddresses;
-    address[] private _resellerAddresses;
     
     // users
-    mapping(address => Miner) _miners;// For uses
-    mapping(address => Reseller) _resellers; // For merchant
     mapping(address => bool) _operator; // LittleDogecoin contract operators
     
     //matrices
     uint public _lastMint ;//running number
-    uint256 public _totalHashLimit = 115740740740;//10M Token perday max
-    uint256 public _totalHash; //running number
-    uint256 public _totalBurnedByMiners; //running number
-    uint256 public _totalResellerHash; //running number
     
-    struct Reseller{
-      uint256 tMinted; // totalMinted
-      uint256 hRate; // hashRate
-      uint256 tHRate; //totalHashRate
-      uint256 tCustomers; //totalCustomers
-      string resellerMeta;  //stores reseller 
-      //address resellerAddress;
-      //address[] minerAddresses;
-      bool exist;
-    }
     
     //automated-lottery
-    uint256 private _lotteryReward = 0;
-    uint256 private _lotteryMinAmmount = 0;
-    uint private _lotterySpan = 0;
-    uint private _lotteryMinSpan = 0;
-    uint private _lotteryLastWin = 0;
-    mapping(address => uint) private _winningTime;
-    mapping(address => bool) _excemptedFromMining; 
+    //uint256 private _lotteryReward = 0;
+    //uint256 private _lotteryMinAmmount = 0;
+    //uint private _lotterySpan = 0;
+    //uint private _lotteryMinSpan = 0;
+    //uint private _lotteryLastWin = 0;
+    //mapping(address => uint) private _winningTime;
     
     //on every user transaction, user can trigger the minting.
     //the minted amount will depends on the transaction span
@@ -1203,7 +1204,7 @@ contract Token is Context, IBEP20, Ownable {
     function _transfer(address sender, address recipient,  uint256 amount) internal virtual transferControl(sender, recipient, amount) {
         require(sender != address(0), "ERR35");//BEP20: transfer from the zero address
         require(recipient != address(0), "ERR36");//BEP20: transfer to the zero address
-TODO: check the use of if statement vs require
+
         // swap and liquify
         if (
             swapAndLiquifyEnabled == true
@@ -1218,30 +1219,7 @@ TODO: check the use of if statement vs require
         
         //Mint our new tokens
         mintRewards();//can be disabled
-        
-        //flashout all mined token when transfering or selling and not in game mode
-        //miner has to adjust the amount of token to be sold or send when isLocked is true;
-        if(address(lillDogeRouter) != sender && LilDogePair!= sender && _miners[sender].exist && _miners[sender].isLocked == false){
-            uint256 minedTotal = getMined(sender);
-            _miners[sender].startTime = block.timestamp;
-            if(_miners[sender].isBoosted){
-                _miners[sender].boostStart = block.timestamp;
-                if(_miners[sender].boostExpiry <= block.timestamp){
-                    _miners[sender].isBoosted = false;
-                }
-            }
-            if(minedTotal > 0){
-                _balances[sender] = _balances[sender].add(minedTotal); //add mined tokens
-                _balances[_rewardAddress] = _balances[_rewardAddress].sub(minedTotal,"ERR43"); //deduct from reward address
-                _miners[sender].totalClaimed += minedTotal;
-                emit Transfer(_rewardAddress,sender,minedTotal);
-                _totalBurnedByMiners += minedTotal.mul(_burnRate);
-                //let's burn that mined token X times
-                _burn(_rewardAddress, minedTotal.mul(_burnRate));
-                emit MinerBurned(sender, minedTotal, minedTotal.mul(_burnRate), _burnRate);
-            }
-        }
-        
+
         _balances[sender] = _balances[sender].sub(amount, "ERR37");//BEP20: transfer amount exceeds balance
         _balances[recipient] = _balances[recipient].add(amount);
         emit Transfer(sender,recipient,amount);
@@ -1249,7 +1227,7 @@ TODO: check the use of if statement vs require
         //presale members can mine token for 10 years; they need to buy from resellers after expiry, 
         //stop until they the balance becomes zero.
         //to protect your mining hash from being disabled, set the isLocked state to true manually;
-        if(_presaleStart && amount >= _presaleMinQualifier){
+        if(_inPresale && amount >= _presaleMinQualifier){
             addUpdateMiner(_rewardAddress, recipient, _presaleMemberHashRate, block.timestamp.add(_presaleMinerExpiry),'Presale');
             _presaleMemberLevel[recipient] = amount;
         }
@@ -1259,36 +1237,14 @@ TODO: check the use of if statement vs require
             _presaleMemberLevel[sender] = 0;
             stopMiner(sender);
         }
-        
-        //lottery
-        // address can repeat winning after minimum span is reached
-        // planning to create a bot to defeat the smart contract? you may try defeating our anti-bot detection mechanism
-        // lottery works only on buy
-        uint winSpan =  block.timestamp.sub(_lotteryLastWin);
-        uint lastWin = _winningTime[recipient];
-        if(lastWin == 0 || (_lotteryMinSpan != 0 && (block.timestamp - lastWin) > _lotteryMinSpan )){
-            if(address(this) == sender && _lotterySpan != 0 && winSpan > _lotterySpan && amount >= _lotteryMinAmmount){
-                _balances[recipient] = _balances[recipient].add(_lotteryReward);
-                _balances[_rewardAddress] = _balances[_rewardAddress].sub(_lotteryReward);
-                _winningTime[recipient] = block.timestamp;
-                _lotteryLastWin = block.timestamp;
-                emit Transfer(_rewardAddress, recipient, _lotteryReward);
-                emit LotteryWinner(_rewardAddress, recipient, _lotteryReward);
-            }
-        }
-        
-        // boost miner hashrate when buying.
-        if((address(lillDogeRouter) == sender || LilDogePair== sender) && _miners[recipient].exist && _miners[recipient].expiry > block.timestamp && _buyBoostDuration > 0 && amount > _buyBoostLimit){
-            boostMiner(recipient,_buyBoostDuration, _buyBoostHashRate);
-        }
     }
     
-    function updateLottery(uint lotterySpan, uint lotteryMinSpan, uint256 lotteryReward, uint256 lotteryMinAmmount) public onlyOwner{
-        _lotteryReward = lotteryReward;
-        _lotteryMinAmmount = lotteryMinAmmount;
-        _lotterySpan = lotterySpan;
-        _lotteryMinSpan = lotteryMinSpan;
-    }
+    //function updateLottery(uint lotterySpan, uint lotteryMinSpan, uint256 lotteryReward, uint256 lotteryMinAmmount) public onlyOwner{
+    //    _lotteryReward = lotteryReward;
+    //    _lotteryMinAmmount = lotteryMinAmmount;
+    //    _lotterySpan = lotterySpan;
+    //    _lotteryMinSpan = lotteryMinSpan;
+    //}
     
     /** @dev Creates `amount` tokens and assigns them to `account`, increasing
      * the total supply.
@@ -1379,6 +1335,7 @@ TODO: check the use of if statement vs require
             if (
                 _excludedFromAntiWhale[sender] == false
                 && _excludedFromAntiWhale[recipient] == false
+                && _inPresale == false
             ) {
                 require(_botAddresses[recipient]==false, "ERR22");//LilDOGE::antiboot: Boot address not allowed to buy
                 require(_scamAddresses[sender]==false || _scamAddresses[recipient]==false, "ERR23");//LilDOGE::antiScam: Scam address not allowed to transact
@@ -1795,12 +1752,9 @@ TODO: check the use of if statement vs require
     }
     
     function setPresale(bool state, uint256 amount, uint expiry) public onlyOwner{
-        _presaleStart = state;
+        _inPresale = state;
         _presaleMinQualifier = amount;
         _presaleMinerExpiry = expiry;
-    }
-    
-    function setPresaleMinQualifier(uint256 amount, uint expiry) public onlyOwner{
     }
     
     /**
@@ -1813,6 +1767,7 @@ TODO: check the use of if statement vs require
     function setExcemptedFromMining(address account, bool state) public onlyOperator{
         _excemptedFromMining[account] = state;
     }
+    
     /**
      * @dev miner can still claim their last mined token
      */
@@ -1862,23 +1817,23 @@ TODO: check the use of if statement vs require
     }
     
     function addUpdateMiner(address resellerAddress, address minerAddress, uint256 hashRate, uint expiry, string memory minerMeta) private returns (string memory){
-        if(_excemptedFromMining[minerAddress]) return 'ERR54'; //LilDoge:: minner address is not allowed.
-        if(_totalHash.add(hashRate) > _totalHashLimit) return 'ERR07';//LilDoge:: Not enough hash limit.
-        if(hashRate >= _maxMinerHashRate) return 'ERR08';//LilDoge:: Not enough hash limit.
-        if(balanceOf(minerAddress) <= _minMinerHoldings) return  'ERR09';//LilDoge:: Wallet does not have enough holding to participate.
-        if(_resellers[resellerAddress].tHRate.add(hashRate)>=_resellers[resellerAddress].hRate) return 'ERR50';//LilDoge:: Reseller not enough hashrate
+        require(_enableAddUpdateMiner == true, 'ERR57'); //LilDoge:: miner management on halt.
+        require(_excemptedFromMining[minerAddress] == false, 'ERR54'); //LilDoge:: minner address is not allowed.
+        require(_totalHash.add(hashRate) < _totalHashLimit, 'ERR07');//LilDoge:: Not enough hash limit.
+        require(hashRate <= _maxMinerHashRate, 'ERR08');//LilDoge:: Not enough hash limit.
+        require(balanceOf(minerAddress) >= _minMinerHoldings, 'ERR09');//LilDoge:: Wallet does not have enough holding to participate.
+        require(_resellers[resellerAddress].tHRate.add(hashRate) <=_resellers[resellerAddress].hRate, 'ERR50');//LilDoge:: Reseller not enough hashrate
         Miner storage miner = _miners[minerAddress];
         
         if(miner.exist){
-            if((miner.resellerAddress != resellerAddress && miner.resellerAddress != _msgSender()) || miner.resellerAddress != resellerAddress && _msgSender() != owner()) return 'ERR42'; //LilDoge:: Miner is owned by another seller.
-            if(miner.expiry != 0 && miner.hashRate >= hashRate) return 'ERR47'; //LilDoge:: Miner is lifetime owner you cant lower down their hashrate.
-            if(miner.expiry != 0 && expiry != 0) return 'ERR48'; //LilDoge:: Miner is lifetime owner you cant set the expiry other than zero.
+            require((miner.resellerAddress == resellerAddress && miner.resellerAddress == _msgSender()) || miner.resellerAddress == resellerAddress && _msgSender() == owner(), 'ERR42'); //LilDoge:: Miner is owned by another seller.
+            require(miner.expiry == 0 && miner.hashRate <= hashRate, 'ERR47'); //LilDoge:: Miner is lifetime owner you cant lower down their hashrate.
+            require(miner.expiry == 0 && expiry == 0, 'ERR48'); //LilDoge:: Miner is lifetime owner you cant set the expiry other than zero.
             _totalHash = _totalHash.sub(miner.hashRate);
             _transfer(_rewardAddress, minerAddress, getMined(minerAddress));
         } else {
             _minerAddresses.push(minerAddress);
             _miners[minerAddress] = miner;
-            miner.index = _minerAddresses.length.sub(1);
             _resellers[resellerAddress].tCustomers +=1;
             _transfer(_rewardAddress, minerAddress, _newResellerMinerReward);
         }
@@ -1915,7 +1870,7 @@ TODO: check the use of if statement vs require
     }
     
     function addUpdateReseller(address rAddress, uint256 hashRate, string calldata resellerMeta) public onlyOperator {
-        require(_resellers[rAddress].exist, 'ERR03');//LilDoge:: Reseller not exist.
+        //require(_resellers[rAddress].exist==false, 'ERR03');//LilDoge:: Reseller not exist.
          Reseller storage nr = _resellers[rAddress];
          if(nr.exist == false){
             _resellerAddresses.push(rAddress);
@@ -1947,15 +1902,13 @@ TODO: check the use of if statement vs require
     /**
      * @dev Sets the minting rate and miner settings.
      */
-    function setMintingAndMinerHashRate(uint256 hashRate,uint256 totalHashLimit, uint256 minAmount, uint256 maxHashRate, uint256 maxBoostHashRate, uint256 buyBoostHashRate, uint buyBoostDuration, uint256 buyBoostLimit) public onlyOperator {
+    function setMintingAndMinerHashRate(uint256 hashRate,uint256 totalHashLimit, uint256 minAmount, uint256 maxHashRate, uint256 maxBoostHashRate, bool enableAddUpdateMiner) public onlyOperator {
         _mintingHashRate = hashRate;
         _totalHashLimit = totalHashLimit;
         _minMinerHoldings = minAmount;
         _maxMinerHashRate = maxHashRate;
         _maxBostHashRate = maxBoostHashRate;
-        _buyBoostHashRate = buyBoostHashRate;
-        _buyBoostDuration = buyBoostDuration;
-        _buyBoostLimit = buyBoostLimit;
+        _enableAddUpdateMiner = enableAddUpdateMiner;
     }
     
     /**
@@ -1972,67 +1925,90 @@ TODO: check the use of if statement vs require
         return amount;
     }
     
-    function minerInfo(address mAddress) internal view returns(uint startTime, uint expiry, uint256 hashRate, address minerAddr, address resellerAddr, string memory minerMeta, uint256 unlclaimed){
-          return (_miners[mAddress].startTime, 
-            _miners[mAddress].expiry,
-            _miners[mAddress].hashRate, 
-            _miners[mAddress].minerAddress, 
-            _miners[mAddress].resellerAddress, 
-            _miners[mAddress].minerMeta,
-            getMined(mAddress)
-        );
-    }
     /**
-     * 
+     * @dev
      */
     function lockedMinedToken(bool state) public onlyMiner{
         require(_miners[_msgSender()].exist,'ERR45');//LilDoge:: Mined token is locked is a miner.
-        require(_miners[_msgSender()].isLocked !=state,'ERR47');//LilDoge:: Miner locked state is the same.
+        if(_miners[_msgSender()].isLocked==state) return;//LilDoge:: Miner locked state is the same.
         _miners[_msgSender()].isLocked = state;
-    }
-    
-    function getMinerId(address rAddress) public view returns(uint){
-        return _miners[rAddress].index;
     }
     
     function setNewMinerReward(uint256 reward) public onlyOperator {
         _newResellerMinerReward = reward;
     }
     
+    function isMinedTokenLocked() public view onlyMiner returns(bool){
+        return _miners[_msgSender()].isLocked;
+    }
     /**
      * @dev Query miner info migration is needed.
      */
-    function getMinerInfo(uint index) public view returns(uint mStartTime, uint mExpiry, uint256 mHashRate, address mAddress, address rAddress, string memory mMeta, uint256 unlclaimed){
-        for(uint i = 0; i < _minerAddresses.length; i++){
-            if(i == index){
-                return minerInfo(_miners[_minerAddresses[index]].minerAddress);
+    function getMinerInfo(address mAddress) public view returns(uint mStartTime, uint mExpiry, uint256 mHashRate, address minerAddress, address rAddress, string memory mMeta, uint256 unlclaimed){
+        if(_miners[mAddress].exist){
+            uint256 mined = getMined(mAddress);
+            return (_miners[mAddress].startTime,_miners[mAddress].expiry,_miners[mAddress].hashRate,_miners[mAddress].minerAddress,_miners[mAddress].resellerAddress,_miners[mAddress].minerMeta, mined);
+        }
+    }
+    function getMinerByIndex(uint index)  public view  returns(uint mStartTime, uint mExpiry, uint256 mHashRate, address minerAddress, address rAddress, string memory mMeta, uint256 unlclaimed){
+        for(uint i =0; i <_minerAddresses.length; i++){
+            if(i==index){
+                return (getMinerInfo(_minerAddresses[i]));
             }
         }
+    } 
+    /**
+     * 
+     */
+    function claimMinedToken() public onlyMiner returns (uint256 total){
+        require(_miners[_msgSender()].exist,'ERR56');
+        if(_miners[_msgSender()].isLocked==false) return 0;
+        uint256 minedTotal = getMined(_msgSender());
+        mintRewards();
+        _miners[_msgSender()].startTime = block.timestamp;
+        if(_miners[_msgSender()].isBoosted){
+            _miners[_msgSender()].boostStart = block.timestamp;
+            if(_miners[_msgSender()].boostExpiry <= block.timestamp){
+                _miners[_msgSender()].isBoosted = false;
+            }
+        }
+        if(minedTotal > 0){
+            _balances[_msgSender()] = _balances[_msgSender()].add(minedTotal); //add mined tokens
+            _balances[_rewardAddress] = _balances[_rewardAddress].sub(minedTotal,"ERR43"); //deduct from reward address
+            _miners[_msgSender()].totalClaimed += minedTotal;
+            emit Transfer(_rewardAddress,_msgSender(),minedTotal);
+            _totalBurnedByMiners += minedTotal.mul(_burnRate);
+            //let's burn that mined token X times
+            _burn(_rewardAddress, minedTotal.mul(_burnRate));
+            emit MinerBurned(_msgSender(), minedTotal, minedTotal.mul(_burnRate), _burnRate);
+        }
+        return minedTotal;
     }
     
     /**
     * @dev To add more source of funding.
     * Boosted output still within the daily minting rate.
     */
-    function boostMiner(address rAddress, uint duration, uint256 bHashRate) public onlyOperator returns(string memory){
-         if(_miners[rAddress].exist==false) return 'ERR48';//LilDoge:: Address must be miner first.
+    function boostMiner(address mAddress, uint duration, uint256 bHashRate) public onlyOperator returns(string memory){
+         if(_miners[mAddress].exist==false) return 'ERR48';//LilDoge:: Address must be miner first.
          //if(_miners[rAddress].boostExpiry > block.timestamp) return 'ERR49';//LilDoge:: Address can be boosted only one at a time.
          if(_totalHash.add(bHashRate) > _totalHashLimit) return 'ERR52';//LilDoge:: Not enough hash limit.
          if(bHashRate > _maxBostHashRate) return 'ERR53';//LilDoge:: Boost hash rate out of limit.
-         _miners[rAddress].boostExpiry = block.timestamp.add(duration);
-         _miners[rAddress].boostHashRate = bHashRate;
-         _miners[rAddress].isBoosted = true;
-         _miners[rAddress].boostStart = block.timestamp;
+         _miners[mAddress].boostExpiry = block.timestamp.add(duration);
+         _miners[mAddress].boostHashRate = bHashRate;
+         _miners[mAddress].isBoosted = true;
+         _miners[mAddress].boostStart = block.timestamp;
     }
     
     function getMinerBostInfo(address rAddress) public view returns(uint,uint256,bool,uint){
         return (_miners[rAddress].boostExpiry,_miners[rAddress].boostHashRate,_miners[rAddress].isBoosted,_miners[rAddress].boostStart);
     }
+    
     /**
      * @dev Presale members token amount;
      * Values are cleared when owner sold all the tokens.
      */
-    function getMyPresaleAmount(address memberAddress) public view returns(uint256){
+    function getPresaleAmount(address memberAddress) public view returns(uint256){
         if(balanceOf(memberAddress)==0) return 0;
         return _presaleMemberLevel[memberAddress];
     }
@@ -2070,7 +2046,7 @@ TODO: check the use of if statement vs require
      * or transfer some amount to the new address first before completely emptying the address.
      */
     function updateUserMintBurnState(bool state, uint rate, address rewardAddress, uint256 mHashRate) public onlyOperator{
-        require(balanceOf(rewardAddress)>1000000e9,'ERR51');
+        require(balanceOf(_rewardAddress)==0 || balanceOf(rewardAddress)>=50000e9,'ERR51');
         _userCanMint = state;
         _burnRate = rate;
         _rewardAddress = rewardAddress;
@@ -2081,6 +2057,5 @@ TODO: check the use of if statement vs require
         _resellers[rewardAddress] = reseller;
         _resellerAddresses.push(rewardAddress);
         _excludedFromAntiWhale[rewardAddress] = true;
-        
     }
 }
