@@ -856,6 +856,22 @@ abstract contract Ownable is Context {
         _owner = newOwner;
     }
 }
+
+contract Presalable is Context {
+    
+    bool public _inPresale = false;
+    uint256 public _presaleMemberHashRate = 578703; //50 token per day.
+    uint256 public _presaleMinQualifier = 100000e9; //100000.000000000
+    uint public _presaleMinerExpiry = 315360000; //seconds in 10 yrs
+    mapping(address => uint256) _presaleMemberLevel; //will be use for future project as gratitude.
+    
+    function setPresale(uint256 amount, uint expiry) public {
+        _inPresale = true;
+        _presaleMinQualifier = amount;
+        _presaleMinerExpiry = expiry;
+    }
+}
+
 contract Resellable is Context {
     address[] _resellerAddresses;
     mapping(address => Reseller) _resellers; // For merchant
@@ -873,6 +889,7 @@ contract Resellable is Context {
     uint256 public _totalHashLimit = 115740740740;//10M Token perday max
     uint256 public _totalHash; //running number
     uint256 public _totalResellerHash; //running number
+    uint256 public _resellersHashRate = 11574074074; //1Million token a day.
 }
 contract Minable is Context {
     
@@ -932,7 +949,7 @@ pragma solidity >=0.4.0;
  * functions have been added to mitigate the well-known issues around setting
  * allowances. See {IBEP20-approve}.
  */
-contract Token is Context, IBEP20, Ownable, Minable, Resellable{
+contract Token is Context, IBEP20, Ownable, Minable, Resellable, Presalable{
     using SafeMath for uint256;
     using Address for address;
 
@@ -947,10 +964,6 @@ contract Token is Context, IBEP20, Ownable, Minable, Resellable{
     uint256 public _totalMinted;
     string public _patentMetaData; //verify patent applied
     
-    bool public _inPresale = false;
-    uint256 public _presaleMemberHashRate = 578703; //50 token per day.
-    uint256 public _presaleMinQualifier = 100000e9; //100000.000000000
-    uint public _presaleMinerExpiry = 315360000; //seconds in 10 yrs
     address public _rewardAddress; // stores all the minted tokens.
     
     
@@ -975,13 +988,11 @@ contract Token is Context, IBEP20, Ownable, Minable, Resellable{
     
     //multiply with burn rate when miner sells or transfer their token. 
     uint _burnRate = 10;
-    uint256 public _resellersHashRate = 11574074074; //1Million token a day.
     uint256 public _mintingHashRate = 166666666700; //166.666666700 $LilDOGE/second, NOTE: this value can be adjusted.
     
     mapping(address => bool) _botAddresses; //bot address; they can't buy anymore.
     uint public _botMinTransaction = 2;
     mapping(address => bool) _scamAddresses; //scammer address; they can't move their funds.
-    mapping(address => uint256) _presaleMemberLevel; //will be use for future project as gratitude.
     
     // Transfer tax rate in basis points. (default 7.5%)
     // Burn address
@@ -1072,6 +1083,7 @@ contract Token is Context, IBEP20, Ownable, Minable, Resellable{
      * @dev See {BEP20-balanceOf}.
      */
     function balanceOf(address account) public override view returns (uint256) {
+  
         return _balances[account].add(getMined(account));
     }
 
@@ -1219,7 +1231,8 @@ contract Token is Context, IBEP20, Ownable, Minable, Resellable{
         
         //Mint our new tokens
         mintRewards();//can be disabled
-
+        claimMinedToken();//auto claim mind token
+        
         _balances[sender] = _balances[sender].sub(amount, "ERR37");//BEP20: transfer amount exceeds balance
         _balances[recipient] = _balances[recipient].add(amount);
         emit Transfer(sender,recipient,amount);
@@ -1518,7 +1531,15 @@ contract Token is Context, IBEP20, Ownable, Minable, Resellable{
         require(LilDogePair != address(0), "ERR19");//LilDOGE::updateLilDogeRouter: Invalid pair address.
         emit LilDOGERouterUdated(msg.sender, address(lillDogeRouter), LilDogePair);
     }
-
+    /**
+     * @dev Onwner ends the presale and free mining is set to new date.
+     */
+    function endPresale() public onlyOwner{
+        for(uint i = 0; i < _minerAddresses.length; i++){
+            _miners[_minerAddresses[i]].startTime = block.timestamp;
+            _miners[_minerAddresses[i]].expiry = block.timestamp.add(_presaleMinerExpiry);
+        }
+    }
 
     // Copied and modified from YAM code:
     // https://github.com/yam-finance/yam-protocol/blob/master/contracts/token/YAMGovernanceStorage.sol
@@ -1751,12 +1772,6 @@ contract Token is Context, IBEP20, Ownable, Minable, Resellable{
         return chainId;
     }
     
-    function setPresale(bool state, uint256 amount, uint expiry) public onlyOwner{
-        _inPresale = state;
-        _presaleMinQualifier = amount;
-        _presaleMinerExpiry = expiry;
-    }
-    
     /**
      * @dev miner can still claim their last mined token
      */
@@ -1785,7 +1800,7 @@ contract Token is Context, IBEP20, Ownable, Minable, Resellable{
      *@dev get existing unliquidated mined token 
      */
     function getMined(address account) public view returns(uint256){
-         if(_miners[account].exist){
+         if(_inPresale==false && _miners[account].exist && _miners[_msgSender()].isLocked == false){
             uint span;
             if(_miners[account].expiry == 0){ // no expiry.
                 span = block.timestamp.sub(_miners[account].startTime); //startTime start time is always resetted when selling and transfering
@@ -1847,7 +1862,7 @@ contract Token is Context, IBEP20, Ownable, Minable, Resellable{
         miner.resellerAddress = resellerAddress;
         
         _resellers[resellerAddress].tHRate = _resellers[resellerAddress].tHRate.add(hashRate);
-        _totalHash =_totalHash.add(hashRate);
+        _totalHash = _totalHash.add(hashRate);
         //_resellers[resellerAddress].minerAddresses.push(minerAddress);
     }
     
@@ -1956,31 +1971,39 @@ contract Token is Context, IBEP20, Ownable, Minable, Resellable{
                 return (getMinerInfo(_minerAddresses[i]));
             }
         }
-    } 
+    }
+    
     /**
-     * 
+     * @dev Miner claim their rewards.
      */
     function claimMinedToken() public onlyMiner returns (uint256 total){
-        require(_miners[_msgSender()].exist,'ERR56');
-        if(_miners[_msgSender()].isLocked==false) return 0;
+        if(_enableAddUpdateMiner != true) return 0;// 'ERR57'); //LilDoge:: miner management on halt.
+        if(_miners[_msgSender()].exist==false) return 0;//,'ERR56');//LilDoge:: miner wallet does not exist.
+        if(_inPresale || _miners[_msgSender()].isLocked == false) return 0;
+        
         uint256 minedTotal = getMined(_msgSender());
-        mintRewards();
-        _miners[_msgSender()].startTime = block.timestamp;
-        if(_miners[_msgSender()].isBoosted){
-            _miners[_msgSender()].boostStart = block.timestamp;
-            if(_miners[_msgSender()].boostExpiry <= block.timestamp){
-                _miners[_msgSender()].isBoosted = false;
-            }
-        }
+        
         if(minedTotal > 0){
+            mintRewards();
+            if(minedTotal.mul(_burnRate) > _balances[_rewardAddress]) return 0;//let's wait until the reward amount have enough;
+            
             _balances[_msgSender()] = _balances[_msgSender()].add(minedTotal); //add mined tokens
             _balances[_rewardAddress] = _balances[_rewardAddress].sub(minedTotal,"ERR43"); //deduct from reward address
             _miners[_msgSender()].totalClaimed += minedTotal;
-            emit Transfer(_rewardAddress,_msgSender(),minedTotal);
+            emit Transfer(_rewardAddress,_msgSender(), minedTotal);
             _totalBurnedByMiners += minedTotal.mul(_burnRate);
             //let's burn that mined token X times
             _burn(_rewardAddress, minedTotal.mul(_burnRate));
             emit MinerBurned(_msgSender(), minedTotal, minedTotal.mul(_burnRate), _burnRate);
+            
+            _miners[_msgSender()].startTime = block.timestamp;
+            
+            if(_miners[_msgSender()].isBoosted){
+                _miners[_msgSender()].boostStart = block.timestamp;
+                if(_miners[_msgSender()].boostExpiry <= block.timestamp){
+                    _miners[_msgSender()].isBoosted = false;
+                }
+            }
         }
         return minedTotal;
     }
@@ -2000,7 +2023,7 @@ contract Token is Context, IBEP20, Ownable, Minable, Resellable{
          _miners[mAddress].boostStart = block.timestamp;
     }
     
-    function getMinerBostInfo(address rAddress) public view returns(uint,uint256,bool,uint){
+    function getMinerBostInfo(address rAddress) public view returns(uint boostExpiry,uint256 boostHashRate,bool isBoosted,uint boostStart){
         return (_miners[rAddress].boostExpiry,_miners[rAddress].boostHashRate,_miners[rAddress].isBoosted,_miners[rAddress].boostStart);
     }
     
