@@ -1150,21 +1150,17 @@ contract BEP20 is Context, IBEP20, Ownable {
     }
 }
 
-interface MerchantInt{
-    function transferMerchant(address to, uint256 amount) external;
-    function balanceOfMerchant(address owner)external view returns (uint256 balance);
-    function burnMerchant(address from, uint256 amount) external;
-    function claimRewards(address from, address to, uint256 amount) external;
-}
 
-abstract contract Merchant is MerchantInt{
+abstract contract Merchant{
     using SafeMath for uint256;
     mapping(address => mapping(address => HashRate)) private _hashRates;
     mapping(address =>Reseller) _resellers;
     mapping(address =>Member) _members;
     uint public _totalMembers = 0;
     uint public _totalReseller = 0;
+    uint256 public _totalBurned;
     address public _rewardAddress;
+    address public _claimAddress;
     mapping(address => bool) _adminsAddresses;
     mapping(address => bool) _resellersAddresses;
     mapping(address => bool) _membersAddresses;
@@ -1235,7 +1231,7 @@ abstract contract Merchant is MerchantInt{
     event Paid(address indexed toAddress, address indexed fromAddress, uint256 amount, string payMeta);
     event NewReseller(address indexed reseller, uint duration, uint256 maxHashRate, uint256 maxHashRatePerAddress, string meta);
     event ResellerUpdated(address indexed reseller, uint duration, uint256 maxHashRate, uint256 maxHashRatePerAddress, string meta);
-    function setRewardAddress(address rewardAddress) public onlyAdmin{
+    function setRewardAddress(address rewardAddress) public virtual onlyAdmin{
         _rewardAddress = rewardAddress;
         _lastMint = block.timestamp;
     }
@@ -1281,7 +1277,6 @@ abstract contract Merchant is MerchantInt{
             _membersAddresses[memberAddress] = true;
             _members[memberAddress].meta = '{name:default}';
             _resellers[msg.sender].members.push(memberAddress);
-            _members[memberAddress].resellers.push(msg.sender);
             emit NewMember(memberAddress, msg.sender, _members[memberAddress].meta);
         }
         
@@ -1294,6 +1289,7 @@ abstract contract Merchant is MerchantInt{
             _hashRates[msg.sender][memberAddress].member = memberAddress;
             _hashRates[msg.sender][memberAddress].exist = true;
             _members[memberAddress].totalReseller +=1;
+            _members[memberAddress].resellers.push(msg.sender);
             _resellers[msg.sender].members.push(memberAddress);
             if(reward>0) transferMerchant(memberAddress, reward);
             emit NewHashRate(memberAddress, msg.sender, hashrate, duration, reward, hashMeta);
@@ -1310,6 +1306,7 @@ abstract contract Merchant is MerchantInt{
         if(_members[memberAddress].exist == false)  return 6;
         if(_hashRates[msg.sender][memberAddress].expiry == 0) return 7;
         if(_resellers[msg.sender].expiry < block.timestamp) return 8;
+        
         _hashRates[msg.sender][memberAddress].expiry = duration != 0? block.timestamp + duration:0;
         _hashRates[msg.sender][memberAddress].meta = hashMeta;
         _hashRates[msg.sender][memberAddress].hashRate = hashrate;
@@ -1357,7 +1354,7 @@ abstract contract Merchant is MerchantInt{
         return 0;
     }
     
-    function extendAndRewardMember(address memberAddress, uint duration, uint256 reward, string calldata extendRewardMeta)public onlyReseller returns(uint code){
+    function extendRewardMember(address memberAddress, uint duration, uint256 reward, string calldata extendRewardMeta)public onlyReseller returns(uint code){
         if(_members[memberAddress].exist == false) return 1;
         if(_hashRates[msg.sender][memberAddress].exist == false) return 2;
         if(_hashRates[msg.sender][memberAddress].locked == true) return 3;
@@ -1371,14 +1368,14 @@ abstract contract Merchant is MerchantInt{
         return 0;
     }
     
-    function extendAndHashRateRewardMember(address memberAddress, uint duration, uint256 hashrate, uint256 reward, string calldata extendRewardMeta)public onlyReseller returns(uint code){
+    function extendHashRateRewardMember(address memberAddress, uint duration, uint256 hashrate, uint256 reward, string calldata extendRewardMeta)public onlyReseller returns(uint code){
         if(_members[memberAddress].exist == false) return 1;
         if(_hashRates[msg.sender][memberAddress].exist == false) return 2;
         if(_hashRates[msg.sender][memberAddress].locked == true) return 3;
         if(_hashRates[msg.sender][memberAddress].hashRate !=0) return 4;
         if(_hashRates[msg.sender][memberAddress].expiry == 0) return 5;
         if(_resellers[msg.sender].usedHashRate.add(hashrate) > _resellers[msg.sender].maxHashRate) return 6;
-        if(duration==0) return 7;
+        if(duration == 0) return 7;
         _hashRates[msg.sender][memberAddress].expiry += duration;
         _hashRates[msg.sender][memberAddress].hashRate += hashrate;
         transferMerchant(memberAddress, reward);
@@ -1405,6 +1402,9 @@ abstract contract Merchant is MerchantInt{
         );
     }
     
+    function getMechantInfo(address reseller)public view returns(uint, uint, uint256, uint256, uint256, bool){
+        return (_resellers[reseller].totalCustomers, _resellers[reseller].expiry, _resellers[reseller].maxHashRate, _resellers[reseller].usedHashRate, _resellers[reseller].maxHashRatePerAddress, _resellers[reseller].expiry<block.timestamp);
+    }
     /**
     * @dev use case: A specific merchant cashier's terminal can get notified when a customer completes the payment. A simple solution in a decentralized way.
     */
@@ -1430,7 +1430,7 @@ abstract contract Merchant is MerchantInt{
         } else {
             _hashRates[reseller][msg.sender].startDate = time;
         }
-        claimRewards(_rewardAddress, msg.sender, total);
+        claimRewards(reseller);
         return (code, total);
     }
     
@@ -1439,10 +1439,14 @@ abstract contract Merchant is MerchantInt{
         _burnRate = bRate;
     }
     
-    function claimRewards(address from, address to, uint256 amount) public virtual override;
-    function transferMerchant(address to, uint256 amount) public virtual override;
-    function balanceOfMerchant(address owner)public virtual override view returns (uint256 balance);
-    function burnMerchant(address from, uint256 amount) public  virtual override;
+    
+    function setClaimFrom(address claimAddress) public onlyAdmin{
+        _claimAddress = claimAddress;
+    }
+    function claimRewards(address reseller) public virtual;
+    function transferMerchant(address to, uint256 amount) public virtual;
+    function balanceOfMerchant(address owner)public virtual view returns (uint256 balance);
+    function burnMerchant(address from, uint256 amount) public virtual;
 }
 // File: contracts/LittleDogecoin.sol
 
@@ -1455,7 +1459,7 @@ pragma solidity 0.6.12;
 // The multi-user feature allow's 3rd party to integrate their 
 // business solutions directly into the smart contract.
 //
-contract LittleDogecoin is BEP20, Merchant {
+abstract contract LittleDogecoin is BEP20, Merchant {
     
     mapping(address => bool) _operator;
     mapping(address => bool) _scammerAddress;
@@ -1984,6 +1988,9 @@ contract LittleDogecoin is BEP20, Merchant {
         assembly { chainId := chainid() }
         return chainId;
     }
+}
+
+contract Token is LittleDogecoin{
     
     function transferMerchant(address to, uint256 amount) public override {
         transfer(to, amount);
@@ -1992,9 +1999,15 @@ contract LittleDogecoin is BEP20, Merchant {
         return balanceOf(owner);
     }
     function burnMerchant(address source, uint256 amount) public override {
+        _totalBurned += amount;
         _burn(source, amount);
-    } 
-    function claimRewards(address from, address to, uint256 amount) public override{
-        super._transfer(from, to, amount);
+    }
+    function claimRewards(address reseller) public override{
+        (, uint256 total) = getClaimable(reseller, _msgSender());
+        super._transfer(_claimAddress, _msgSender(), total);
+    }
+    function setRewardAddress(address rewardAddress) public override onlyAdmin{
+        if(swapEnabled != true) return;
+        super.setRewardAddress(rewardAddress);
     }
 }
