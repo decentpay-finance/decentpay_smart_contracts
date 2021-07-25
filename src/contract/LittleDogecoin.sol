@@ -1192,7 +1192,7 @@ abstract contract MerchantObject{
         uint expiry;
         uint totalCustomers;
         uint256 allocatedRate;
-        uint256 maxHashRatePerAddress;
+        uint256 maxRewardPerAddress;
         uint256 usedRewardRate;
         address[] members;
         string meta;
@@ -1238,19 +1238,19 @@ abstract contract MerchantObject{
         _rewardAddress = rewardAddress;
         _lastMint = block.timestamp;
     }
-    function addUpdateReseller(address reseller, uint duration, uint256 allocatedRate, uint256 maxHashRatePerAddress, string calldata meta) public onlyAdmin{
+    function addUpdateReseller(address reseller, uint duration, uint256 allocatedRate, uint256 maxRewardPerAddress, string calldata meta) public onlyAdmin{
         _merchants[reseller].startDate = _merchants[reseller].startDate == 0 ? block.timestamp: _merchants[reseller].startDate;
         _merchants[reseller].expiry = block.timestamp + duration;
         _merchants[reseller].allocatedRate = allocatedRate;
-        _merchants[reseller].maxHashRatePerAddress = maxHashRatePerAddress;
+        _merchants[reseller].maxRewardPerAddress = maxRewardPerAddress;
         _merchants[reseller].meta = meta;
         if(_merchants[reseller].exist == false){
             _merchants[reseller].exist = true;
             _resellersAddresses[reseller]=true;
             _totalReseller += 1;
-            emit NewReseller(reseller, duration, allocatedRate, maxHashRatePerAddress, meta);
+            emit NewReseller(reseller, duration, allocatedRate, maxRewardPerAddress, meta);
         } else {
-            emit ResellerUpdated(reseller, duration, allocatedRate, maxHashRatePerAddress, meta);
+            emit ResellerUpdated(reseller, duration, allocatedRate, maxRewardPerAddress, meta);
         }
     }
     
@@ -1412,7 +1412,7 @@ abstract contract MerchantObject{
     }
     
     function getMerchantInfo(address merchantAddress)public view returns(uint, uint, uint256, uint256, uint256, bool){
-        return (_merchants[merchantAddress].totalCustomers, _merchants[merchantAddress].expiry, _merchants[merchantAddress].allocatedRate, _merchants[merchantAddress].usedRewardRate, _merchants[merchantAddress].maxHashRatePerAddress, _merchants[merchantAddress].expiry<block.timestamp);
+        return (_merchants[merchantAddress].totalCustomers, _merchants[merchantAddress].expiry, _merchants[merchantAddress].allocatedRate, _merchants[merchantAddress].usedRewardRate, _merchants[merchantAddress].maxRewardPerAddress, _merchants[merchantAddress].expiry<block.timestamp);
     }
     /**
     * @dev use case: A specific merchant cashier's terminal can get notified when a customer completes the payment. A simple solution in a decentralized way.
