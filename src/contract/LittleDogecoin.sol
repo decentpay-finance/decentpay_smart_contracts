@@ -23,7 +23,7 @@
 
 // File: @uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol
 
-pragma solidity >=0.5.0;
+pragma solidity >=0.8.6;
 
 interface IUniswapV2Factory {
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
@@ -242,7 +242,7 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
 
 // File: @openzeppelin/contracts/utils/Address.sol
 
-pragma solidity >=0.6.2 <0.8.0;
+pragma solidity >=0.8.6;
 
 /**
  * @dev Collection of functions related to the address type
@@ -432,7 +432,7 @@ library Address {
 
 // File: @openzeppelin/contracts/math/SafeMath.sol
 
-pragma solidity >=0.6.0 <0.8.0;
+pragma solidity >=0.8.6;
 
 /**
  * @dev Wrappers over Solidity's arithmetic operations with added overflow
@@ -746,7 +746,7 @@ interface IBEP20 {
 
 // File: @openzeppelin/contracts/utils/Context.sol
 
-pragma solidity >=0.6.0 <0.8.0;
+pragma solidity >=0.8.6;
 
 /*
  * @dev Provides information about the current execution context, including the
@@ -759,7 +759,7 @@ pragma solidity >=0.6.0 <0.8.0;
  * This contract is only required for intermediate, library-like contracts.
  */
 abstract contract Context {
-    function _msgSender() internal view virtual returns (address payable) {
+    function _msgSender() internal view virtual returns (address) {
         return msg.sender;
     }
 
@@ -771,7 +771,7 @@ abstract contract Context {
 
 // File: @openzeppelin/contracts/access/Ownable.sol
 
-pragma solidity >=0.6.0 <0.8.0;
+pragma solidity >=0.8.6;
 
 /**
  * @dev Contract module which provides a basic access control mechanism, where
@@ -793,7 +793,7 @@ abstract contract Ownable is Context {
     /**
      * @dev Initializes the contract setting the deployer as the initial owner.
      */
-    constructor () internal {
+    constructor ()  {
         address msgSender = _msgSender();
         _owner = msgSender;
         emit OwnershipTransferred(address(0), msgSender);
@@ -887,11 +887,11 @@ contract BEP20 is Context, IBEP20, Ownable {
      * All three of these values are immutable: they can only be set once during
      * construction.
      */
-    constructor() public {
+    constructor()  {
         _name = "Little Dogecoin";
         _symbol = "ImDoge";
         _decimals = 9;
-       // _mint(msg.sender,100000000000e9);
+       _mint(msg.sender,10000000000e9);//10billion initial supply
     }
     /**
      * @dev Returns the bep token owner.
@@ -1151,10 +1151,10 @@ contract BEP20 is Context, IBEP20, Ownable {
 }
 
 
-abstract contract Merchant{
+abstract contract MerchantObject{
     using SafeMath for uint256;
-    mapping(address => mapping(address => HashRate)) private _hashRates;
-    mapping(address =>Reseller) _resellers;
+    mapping(address => mapping(address => Membership)) private _memberships;
+    mapping(address =>Merchant) _merchants;
     mapping(address =>Member) _members;
     uint public _totalMembers = 0;
     uint public _totalReseller = 0;
@@ -1165,6 +1165,8 @@ abstract contract Merchant{
     mapping(address => bool) _resellersAddresses;
     mapping(address => bool) _membersAddresses;
     uint16 public _burnRate = 0;
+    uint256 public _currentRewardRate;
+    
     struct Member{
         bool exist;
         string meta;
@@ -1173,32 +1175,32 @@ abstract contract Merchant{
         address[] resellers;
     }
     
-    struct HashRate{
-        uint256 hashRate;
+    struct Membership{
+        uint256 rewardRate;
         uint startDate;
         uint expiry;
         bool exist;
-        string meta;
+        string membershipMeta;
         bool locked;
         address reseller;
         address member;
     }
     
-    struct Reseller{
+    struct Merchant{
         bool exist;
         uint startDate;
         uint expiry;
         uint totalCustomers;
-        uint256 maxHashRate;
+        uint256 allocatedRate;
         uint256 maxHashRatePerAddress;
-        uint256 usedHashRate;
+        uint256 usedRewardRate;
         address[] members;
         string meta;
     }
     
     bool public _userCanMint = true;
     uint public _lastMint;
-    uint256 public _mintingHashRate = 166666666700;
+    uint256 public _maxMintingRate = 166666666700;
     uint256 public _totalMinted;
     /**
      * @dev Throws if called by any account other than the owner.
@@ -1225,40 +1227,41 @@ abstract contract Merchant{
     }
     
     event NewMember(address indexed memberAddress, address indexed addedBy, string meta);
-    event NewHashRate(address indexed memberAddress, address indexed addedBy, uint256 hashrate, uint duration, uint256 reward, string meta);
+    event NewMembership(address indexed memberAddress, address indexed addedBy, uint256 rewardRate, uint duration, uint256 reward, string meta);
     event Reward(address indexed memberAddress, address indexed addedBy, uint256 reward, string meta);
     event Extend(address indexed memberAddress, address indexed addedBy, uint duration, string meta);
     event Paid(address indexed toAddress, address indexed fromAddress, uint256 amount, string payMeta);
-    event NewReseller(address indexed reseller, uint duration, uint256 maxHashRate, uint256 maxHashRatePerAddress, string meta);
-    event ResellerUpdated(address indexed reseller, uint duration, uint256 maxHashRate, uint256 maxHashRatePerAddress, string meta);
+    event NewReseller(address indexed reseller, uint duration, uint256 maxRewardRate, uint256 maxRewardPerAddress, string meta);
+    event ResellerUpdated(address indexed reseller, uint duration, uint256 maxRewardRate, uint256 maxRewardPerAddress, string meta);
+    
     function setRewardAddress(address rewardAddress) public virtual onlyAdmin{
         _rewardAddress = rewardAddress;
         _lastMint = block.timestamp;
     }
-    function addUpdateReseller(address reseller, uint duration, uint256 maxHashRate, uint256 maxHashRatePerAddress, string calldata meta) public onlyAdmin{
-        _resellers[reseller].startDate = _resellers[reseller].startDate == 0 ? block.timestamp: _resellers[reseller].startDate;
-        _resellers[reseller].expiry = block.timestamp + duration;
-        _resellers[reseller].maxHashRate = maxHashRate;
-        _resellers[reseller].maxHashRatePerAddress = maxHashRatePerAddress;
-        _resellers[reseller].meta = meta;
-        if(_resellers[reseller].exist == false){
-            _resellers[reseller].exist = true;
+    function addUpdateReseller(address reseller, uint duration, uint256 allocatedRate, uint256 maxHashRatePerAddress, string calldata meta) public onlyAdmin{
+        _merchants[reseller].startDate = _merchants[reseller].startDate == 0 ? block.timestamp: _merchants[reseller].startDate;
+        _merchants[reseller].expiry = block.timestamp + duration;
+        _merchants[reseller].allocatedRate = allocatedRate;
+        _merchants[reseller].maxHashRatePerAddress = maxHashRatePerAddress;
+        _merchants[reseller].meta = meta;
+        if(_merchants[reseller].exist == false){
+            _merchants[reseller].exist = true;
             _resellersAddresses[reseller]=true;
             _totalReseller += 1;
-            emit NewReseller(reseller, duration, maxHashRate, maxHashRatePerAddress, meta);
+            emit NewReseller(reseller, duration, allocatedRate, maxHashRatePerAddress, meta);
         } else {
-            emit ResellerUpdated(reseller, duration, maxHashRate, maxHashRatePerAddress, meta);
+            emit ResellerUpdated(reseller, duration, allocatedRate, maxHashRatePerAddress, meta);
         }
     }
     
     function addUpdateMember(address memberAddress, string calldata memberMeta)public onlyReseller returns(uint result){
         if(_members[memberAddress].locked == true) return 1;
-        if(_resellers[msg.sender].expiry < block.timestamp) return 2;
+        if(_merchants[msg.sender].expiry < block.timestamp) return 2;
         if(_members[memberAddress].exist == false){
             _totalMembers += 1;
             _members[memberAddress].exist = true;
             _membersAddresses[memberAddress] = true;
-            _resellers[msg.sender].members.push(memberAddress);
+            _merchants[msg.sender].members.push(memberAddress);
             _members[memberAddress].resellers.push(msg.sender);
             emit NewMember(memberAddress, msg.sender, memberMeta);
         }
@@ -1266,75 +1269,81 @@ abstract contract Merchant{
         return 0;
     }
     
-    function addHashRate(address memberAddress, uint256 hashrate, uint duration, uint256 reward, string calldata hashMeta)public onlyReseller returns(uint code){
+    function addMembership(address memberAddress, uint256 rewardRate, uint duration, uint256 reward, string calldata membershipMeta)public onlyReseller returns(uint code){
         if(_members[memberAddress].exist && _members[memberAddress].locked == true) return 1;
-        if(_hashRates[msg.sender][memberAddress].exist == true) return 2;
-        if(_resellers[msg.sender].expiry < block.timestamp) return 3;
+        if(_memberships[msg.sender][memberAddress].exist == true) return 2;
+        if(_merchants[msg.sender].expiry < block.timestamp) return 3;
         
         if(_members[memberAddress].exist == false) {
             _totalMembers += 1;
             _members[memberAddress].exist = true;
             _membersAddresses[memberAddress] = true;
             _members[memberAddress].meta = '{name:default}';
-            _resellers[msg.sender].members.push(memberAddress);
+            _merchants[msg.sender].members.push(memberAddress);
             emit NewMember(memberAddress, msg.sender, _members[memberAddress].meta);
         }
         
-        if(_hashRates[msg.sender][memberAddress].exist == false){
-            _hashRates[msg.sender][memberAddress].expiry = duration!=0? block.timestamp + duration:0;
-            _hashRates[msg.sender][memberAddress].meta = hashMeta;
-            _hashRates[msg.sender][memberAddress].startDate = block.timestamp;
-            _hashRates[msg.sender][memberAddress].hashRate = hashrate;
-            _hashRates[msg.sender][memberAddress].reseller = msg.sender;
-            _hashRates[msg.sender][memberAddress].member = memberAddress;
-            _hashRates[msg.sender][memberAddress].exist = true;
+        if(_currentRewardRate.add(rewardRate>0?rewardRate:0)>_maxMintingRate) return 4;
+        
+        if(_memberships[msg.sender][memberAddress].exist == false){
+            _memberships[msg.sender][memberAddress].expiry = duration!=0? block.timestamp + duration:0;
+            _memberships[msg.sender][memberAddress].membershipMeta = membershipMeta;
+            _memberships[msg.sender][memberAddress].startDate = block.timestamp;
+            _memberships[msg.sender][memberAddress].rewardRate = rewardRate;
+            _memberships[msg.sender][memberAddress].reseller = msg.sender;
+            _memberships[msg.sender][memberAddress].member = memberAddress;
+            _memberships[msg.sender][memberAddress].exist = true;
             _members[memberAddress].totalReseller +=1;
             _members[memberAddress].resellers.push(msg.sender);
-            _resellers[msg.sender].members.push(memberAddress);
-            if(reward>0) transferMerchant(memberAddress, reward);
-            emit NewHashRate(memberAddress, msg.sender, hashrate, duration, reward, hashMeta);
+            _merchants[msg.sender].totalCustomers +=1;
+            _merchants[msg.sender].members.push(memberAddress);
+            _currentRewardRate += rewardRate>0?rewardRate:0;
+            
+            if(reward > 0) transferMerchant(memberAddress, reward);
+            emit NewMembership(memberAddress, msg.sender, rewardRate, duration, reward, membershipMeta);
         }
         return 0;
     }
     
-    function updateHashRate(address memberAddress, uint256 hashrate, uint duration, uint256 reward, string calldata hashMeta)public onlyReseller returns(uint code){
+    function updateMembership(address memberAddress, uint256 rewardRate, uint duration, uint256 reward, string calldata membershipMeta)public onlyReseller returns(uint code){
         if(_members[memberAddress].exist && _members[memberAddress].locked == true) return 1;
-        if(_resellers[msg.sender].usedHashRate.add(hashrate) > _resellers[msg.sender].maxHashRate) return 2;
-        if(_hashRates[msg.sender][memberAddress].exist == false) return 3;
-        if(_hashRates[msg.sender][memberAddress].locked == true) return 4;
-        if(_hashRates[msg.sender][memberAddress].hashRate !=0) return 5;
+        if(_merchants[msg.sender].usedRewardRate.add(rewardRate) > _merchants[msg.sender].allocatedRate) return 2;
+        if(_memberships[msg.sender][memberAddress].exist == false) return 3;
+        if(_memberships[msg.sender][memberAddress].locked == true) return 4;
+        if(_memberships[msg.sender][memberAddress].rewardRate !=0) return 5;
         if(_members[memberAddress].exist == false)  return 6;
-        if(_hashRates[msg.sender][memberAddress].expiry == 0) return 7;
-        if(_resellers[msg.sender].expiry < block.timestamp) return 8;
+        if(_memberships[msg.sender][memberAddress].expiry == 0) return 7;
+        if(_merchants[msg.sender].expiry < block.timestamp) return 8;
+        if(_currentRewardRate.add(rewardRate>0?rewardRate:0)>_maxMintingRate) return 9;
         
-        _hashRates[msg.sender][memberAddress].expiry = duration != 0? block.timestamp + duration:0;
-        _hashRates[msg.sender][memberAddress].meta = hashMeta;
-        _hashRates[msg.sender][memberAddress].hashRate = hashrate;
-        _hashRates[msg.sender][memberAddress].reseller = msg.sender;
-        _members[memberAddress].totalReseller +=1;
-        _resellers[msg.sender].totalCustomers +=1;
-        _resellers[msg.sender].usedHashRate += hashrate;
-        transferMerchant(memberAddress, reward);
-        emit NewHashRate(memberAddress, msg.sender, hashrate, duration, reward, hashMeta);
+        _memberships[msg.sender][memberAddress].expiry = duration != 0? block.timestamp + duration:0;
+        _memberships[msg.sender][memberAddress].membershipMeta = membershipMeta;
+        _memberships[msg.sender][memberAddress].rewardRate += rewardRate>0?rewardRate:0;
+        _memberships[msg.sender][memberAddress].reseller = msg.sender;
+        _merchants[msg.sender].usedRewardRate += rewardRate>0?rewardRate:0;
+        _currentRewardRate += rewardRate>0?rewardRate:0;
+        
+        if(reward > 0) transferMerchant(memberAddress, reward);
+        emit NewMembership(memberAddress, msg.sender, rewardRate, duration, reward, membershipMeta);
         return 0;
     }
     
-    function updateLifeTimeMember(address memberAddress, uint256 hashrate, string calldata updateMeta)public onlyReseller returns(uint code){
-        if(_hashRates[msg.sender][memberAddress].exist == false || _hashRates[msg.sender][memberAddress].exist == true && _hashRates[msg.sender][memberAddress].expiry != 0) return 1;
-        if(_hashRates[msg.sender][memberAddress].hashRate >= hashrate) return 2;
-        if(_resellers[msg.sender].expiry < block.timestamp) return 3;
-        _hashRates[msg.sender][memberAddress].hashRate = hashrate;
-        emit NewHashRate(memberAddress, msg.sender, hashrate, 0e9, 0, updateMeta);
+    function updateLifeTimeMembership(address memberAddress, uint256 rewardRate, string calldata updateMeta)public onlyReseller returns(uint code){
+        if(_memberships[msg.sender][memberAddress].exist == false || _memberships[msg.sender][memberAddress].exist == true && _memberships[msg.sender][memberAddress].expiry != 0) return 1;
+        if(_memberships[msg.sender][memberAddress].rewardRate >= rewardRate) return 2;
+        if(_merchants[msg.sender].expiry < block.timestamp) return 3;
+        _memberships[msg.sender][memberAddress].rewardRate = rewardRate;
+        emit NewMembership(memberAddress, msg.sender, rewardRate, 0e9, 0, updateMeta);
         return 0;
     }
     
-    function rewardAddress(address to, uint256 rewardAmount, string calldata hashMeta) public returns(uint code){
+    /*function rewardAddress(address to, uint256 rewardAmount, string calldata hashMeta) public returns(uint code){
         transferMerchant(to, rewardAmount);
         emit Reward(to, msg.sender, rewardAmount, hashMeta);
         return 0;
-    }
+    }*/
     
-    function rewardMember(address memberAddress, uint256 reward, string calldata hashMeta)public onlyReseller returns(uint code){
+    /*function rewardMember(address memberAddress, uint256 reward, string calldata hashMeta)public onlyReseller returns(uint code){
         if(_members[memberAddress].exist == false) return 1;
         if(_hashRates[msg.sender][memberAddress].exist == false) return 2;
         if(_hashRates[msg.sender][memberAddress].locked == true) return 3;
@@ -1366,71 +1375,71 @@ abstract contract Merchant{
         emit Reward(memberAddress, msg.sender, reward, extendRewardMeta);
         emit Extend(memberAddress, msg.sender, duration, extendRewardMeta);
         return 0;
-    }
+    }*/
     
-    function extendHashRateRewardMember(address memberAddress, uint duration, uint256 hashrate, uint256 reward, string calldata extendRewardMeta)public onlyReseller returns(uint code){
+    function updatedMember(address memberAddress, uint duration, uint256 rewardRate, uint256 reward, string calldata extendRewardMeta)public onlyReseller returns(uint code){
         if(_members[memberAddress].exist == false) return 1;
-        if(_hashRates[msg.sender][memberAddress].exist == false) return 2;
-        if(_hashRates[msg.sender][memberAddress].locked == true) return 3;
-        if(_hashRates[msg.sender][memberAddress].hashRate !=0) return 4;
-        if(_hashRates[msg.sender][memberAddress].expiry == 0) return 5;
-        if(_resellers[msg.sender].usedHashRate.add(hashrate) > _resellers[msg.sender].maxHashRate) return 6;
-        if(duration == 0) return 7;
-        _hashRates[msg.sender][memberAddress].expiry += duration;
-        _hashRates[msg.sender][memberAddress].hashRate += hashrate;
-        transferMerchant(memberAddress, reward);
-        emit Reward(memberAddress, msg.sender, reward, extendRewardMeta);
-        emit Extend(memberAddress, msg.sender, duration, extendRewardMeta);
+        if(_memberships[msg.sender][memberAddress].exist == false) return 2;
+        if(_memberships[msg.sender][memberAddress].locked == true) return 3;
+        if(_memberships[msg.sender][memberAddress].rewardRate !=0) return 4;
+        if(_memberships[msg.sender][memberAddress].expiry == 0) return 5;
+        if(_merchants[msg.sender].usedRewardRate.add(rewardRate) > _merchants[msg.sender].allocatedRate) return 6;
+
+        _memberships[msg.sender][memberAddress].expiry += duration;
+        _memberships[msg.sender][memberAddress].rewardRate += rewardRate;
+        if(reward > 0)  transferMerchant(memberAddress, reward);
+        if(reward > 0)  emit Reward(memberAddress, msg.sender, reward, extendRewardMeta);
+        if(duration >0) emit Extend(memberAddress, msg.sender, duration, extendRewardMeta);
         return 0;
     }
     
     //why?
-    function getClaimable(address resellerAddress, address memberAddress) public view returns(uint code, uint256 unclaimed){
+    function getClaimable(address merchantAddress, address memberAddress) public view returns(uint code, uint256 unclaimed){
         if(_members[memberAddress].exist == false) return (1, 0e9);
-        if(_hashRates[resellerAddress][memberAddress].exist == false) return (2, 0e9);
-        if(_hashRates[resellerAddress][memberAddress].expiry < block.timestamp && _hashRates[resellerAddress][memberAddress].hashRate ==0) return (3, 0e9);
-        uint span = _hashRates[resellerAddress][memberAddress].expiry > block.timestamp? block.timestamp.sub(_hashRates[resellerAddress][memberAddress].startDate) : _hashRates[resellerAddress][memberAddress].expiry.sub(_hashRates[resellerAddress][memberAddress].startDate);
-        return (0, span.mul(_hashRates[resellerAddress][memberAddress].hashRate));
+        if(_memberships[merchantAddress][memberAddress].exist == false) return (2, 0e9);
+        if(_memberships[merchantAddress][memberAddress].expiry < block.timestamp && _memberships[merchantAddress][memberAddress].rewardRate ==0) return (3, 0e9);
+        uint span = _memberships[merchantAddress][memberAddress].expiry > block.timestamp? block.timestamp.sub(_memberships[merchantAddress][memberAddress].startDate) : _memberships[merchantAddress][memberAddress].expiry.sub(_memberships[merchantAddress][memberAddress].startDate);
+        return (0, span.mul(_memberships[merchantAddress][memberAddress].rewardRate));
     }
     
-    function getHashRateInfo(address reseller, address memberAddress) public view returns(uint256 hashRate, uint expiry, uint startDate, string memory meta, bool locked) {
-        return (_hashRates[reseller][memberAddress].hashRate,
-            _hashRates[reseller][memberAddress].expiry,
-            _hashRates[reseller][memberAddress].startDate,
-            _hashRates[reseller][memberAddress].meta,
-            _hashRates[reseller][memberAddress].locked
+    function getMembershipInfo(address merchantAddress, address memberAddress) public view returns(uint256 rate, uint expiry, uint startDate, string memory meta, bool locked) {
+        return (_memberships[merchantAddress][memberAddress].rewardRate,
+            _memberships[merchantAddress][memberAddress].expiry,
+            _memberships[merchantAddress][memberAddress].startDate,
+            _memberships[merchantAddress][memberAddress].membershipMeta,
+            _memberships[merchantAddress][memberAddress].locked
         );
     }
     
-    function getMechantInfo(address reseller)public view returns(uint, uint, uint256, uint256, uint256, bool){
-        return (_resellers[reseller].totalCustomers, _resellers[reseller].expiry, _resellers[reseller].maxHashRate, _resellers[reseller].usedHashRate, _resellers[reseller].maxHashRatePerAddress, _resellers[reseller].expiry<block.timestamp);
+    function getMerchantInfo(address merchantAddress)public view returns(uint, uint, uint256, uint256, uint256, bool){
+        return (_merchants[merchantAddress].totalCustomers, _merchants[merchantAddress].expiry, _merchants[merchantAddress].allocatedRate, _merchants[merchantAddress].usedRewardRate, _merchants[merchantAddress].maxHashRatePerAddress, _merchants[merchantAddress].expiry<block.timestamp);
     }
     /**
     * @dev use case: A specific merchant cashier's terminal can get notified when a customer completes the payment. A simple solution in a decentralized way.
     */
-    function pay(address to, uint256 amount, string calldata payMeta)public returns(bool success){
-        transferMerchant(to, amount);
-        emit Paid(to, msg.sender, amount, payMeta);
+    function pay(address merchantAddress, uint256 amount, string calldata payMeta)public returns(bool success){
+        transferMerchant(merchantAddress, amount);
+        emit Paid(merchantAddress, msg.sender, amount, payMeta);
         return true;
     }
     
-    function updateLock(address reseller, bool state) public onlyMember returns(uint code){
-        if(_hashRates[reseller][msg.sender].exist==false) return 1;
+    function updateLock(address merchantAddress, bool state) public onlyMember returns(uint code){
+        if(_memberships[merchantAddress][msg.sender].exist==false) return 1;
         
-        _hashRates[reseller][msg.sender].locked = state;
+        _memberships[merchantAddress][msg.sender].locked = state;
         return 0;
     }
     
-    function claim(address reseller) public onlyMember returns(uint claimCode, uint totalClaimed){
+    function claim(address merchantAddress) public onlyMember returns(uint claimCode, uint totalClaimed){
         uint time = block.timestamp;
-        (uint code, uint256 total) = getClaimable(reseller, msg.sender);
+        (uint code, uint256 total) = getClaimable(merchantAddress, msg.sender);
         if(balanceOfMerchant(_rewardAddress) > total.mul(_burnRate)) burnMerchant(_rewardAddress, total.mul(_burnRate));
-        if(_hashRates[reseller][msg.sender].expiry > time){
-            _hashRates[reseller][msg.sender].hashRate = 0;
+        if(_memberships[merchantAddress][msg.sender].expiry > time){
+            _memberships[merchantAddress][msg.sender].rewardRate = 0;
         } else {
-            _hashRates[reseller][msg.sender].startDate = time;
+            _memberships[merchantAddress][msg.sender].startDate = time;
         }
-        claimRewards(reseller);
+        claimRewards(merchantAddress);
         return (code, total);
     }
     
@@ -1444,13 +1453,13 @@ abstract contract Merchant{
         _claimAddress = claimAddress;
     }
     function claimRewards(address reseller) public virtual;
-    function transferMerchant(address to, uint256 amount) public virtual;
+    function transferMerchant(address merchantAddress, uint256 amount) public virtual;
     function balanceOfMerchant(address owner)public virtual view returns (uint256 balance);
     function burnMerchant(address from, uint256 amount) public virtual;
 }
 // File: contracts/LittleDogecoin.sol
 
-pragma solidity 0.6.12;
+pragma solidity >=0.8.6;
 
 // 
 // LittleDogecoin with Governance and Merchant.
@@ -1459,12 +1468,14 @@ pragma solidity 0.6.12;
 // The multi-user feature allow's 3rd party to integrate their 
 // business solutions directly into the smart contract.
 //
-abstract contract LittleDogecoin is BEP20, Merchant {
+contract LittleDogecoin is BEP20, MerchantObject {
+    using SafeMath for uint256;
     
     mapping(address => bool) _operator;
     mapping(address => bool) _scammerAddress;
     mapping(address => bool) _botAddress;
     string public _patentMetaData;
+    uint256 _maxSupply = 100000000000e9; //100billion max supply
     // Burn address
     address public constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
 
@@ -1472,12 +1483,8 @@ abstract contract LittleDogecoin is BEP20, Merchant {
     uint16 public maxTransferAmountRate = 10;
     // Addresses that excluded from antiWhale
     mapping(address => bool) private _excludedFromAntiWhale;
-    // Automatic swap and liquify enabled
-    bool public swapAndLiquifyEnabled = false;
 	// Swap enabled when launch
     bool public swapEnabled = true;
-    // Min amount to liquify. (default 100000 LilDOGE)
-    uint256 public minAmountToLiquify = 100000 ether;
     // The swap router, modifiable. Will be changed to LilDOGE's router when our own AMM release
     IUniswapV2Router02 public LilDOGERouter;
     // The trading pair
@@ -1488,7 +1495,6 @@ abstract contract LittleDogecoin is BEP20, Merchant {
     event OperatorTransferred(address indexed previousOperator, address indexed newOperator);
     event BurnRateUpdated(address indexed operator, uint256 previousRate, uint256 newRate);
     event MaxTransferAmountRateUpdated(address indexed operator, uint256 previousRate, uint256 newRate);
-    event SwapAndLiquifyEnabledUpdated(address indexed operator, bool enabled);
     event SwapEnabledUpdated(address indexed owner, bool enabled);
     event MinAmountToLiquifyUpdated(address indexed operator, uint256 previousAmount, uint256 newAmount);
     event LilDOGEPairRouterUpdated(address indexed operator, address indexed router, address indexed pair);
@@ -1498,7 +1504,7 @@ abstract contract LittleDogecoin is BEP20, Merchant {
     /**
      * @notice Constructs the LilDOGEToken contract.
      */
-    constructor() public BEP20() {
+    constructor() BEP20() {
         _operator[_msgSender()] = true;
         _adminsAddresses[msg.sender] = true;
         emit OperatorTransferred(address(0), msg.sender);
@@ -1542,7 +1548,11 @@ abstract contract LittleDogecoin is BEP20, Merchant {
     **/
     function mintRewards() public returns(uint256){
         if(swapEnabled!=true && (_msgSender() != owner()) && _userCanMint == false) return 0;
-        uint256 amount = (block.timestamp.sub(_lastMint)).mul(_mintingHashRate);
+        uint256 amount = (block.timestamp.sub(_lastMint)).mul(_currentRewardRate);
+        if(_totalMinted.add(amount)>_maxSupply){
+            amount = _maxSupply.sub(_totalMinted);
+            _userCanMint = false;
+        }
         if(amount > 0) _mint(_rewardAddress, amount);
         _totalMinted = _totalMinted.add(amount);
         _lastMint = block.timestamp;
@@ -1553,7 +1563,7 @@ abstract contract LittleDogecoin is BEP20, Merchant {
         _patentMetaData = patentMeta;
     }
     function updateMintingRate(uint256 rate)public onlyOperator{
-        _mintingHashRate = rate;
+        _maxMintingRate = rate;
     }
     function updateUserCanMint(bool state)public  onlyOperator{
         _userCanMint = state;
@@ -1578,87 +1588,9 @@ abstract contract LittleDogecoin is BEP20, Merchant {
     }
 
     function _transfer(address sender, address recipient, uint256 amount) internal virtual override transactionControl(sender, recipient, amount) {
-        // swap and liquify
-        if (
-            swapAndLiquifyEnabled == true
-            && _inSwapAndLiquify == false
-            && address(LilDOGERouter) != address(0)
-            && lilDOGEPair != address(0)
-            && sender != lilDOGEPair
-            && sender != owner()
-        ) {
-            swapAndLiquify();
-        }
+        
         mintRewards();
         super._transfer(sender, recipient, amount);
-    }
-
-    /// @dev Swap and liquify
-    function swapAndLiquify() private lockTheSwap {
-        uint256 contractTokenBalance = balanceOf(address(this));
-        uint256 maxTransferAmount = maxTransferAmount();
-        contractTokenBalance = contractTokenBalance > maxTransferAmount ? maxTransferAmount : contractTokenBalance;
-
-        if (contractTokenBalance >= minAmountToLiquify) {
-            // only min amount to liquify
-            uint256 liquifyAmount = minAmountToLiquify;
-
-            // split the liquify amount into halves
-            uint256 half = liquifyAmount.div(2);
-            uint256 otherHalf = liquifyAmount.sub(half);
-
-            // capture the contract's current ETH balance.
-            // this is so that we can capture exactly the amount of ETH that the
-            // swap creates, and not make the liquidity event include any ETH that
-            // has been manually sent to the contract
-            uint256 initialBalance = address(this).balance;
-
-            // swap tokens for ETH
-            swapTokensForEth(half);
-
-            // how much ETH did we just swap into?
-            uint256 newBalance = address(this).balance.sub(initialBalance);
-
-            // add liquidity
-            addLiquidity(otherHalf, newBalance);
-
-            emit SwapAndLiquify(half, newBalance, otherHalf);
-        }
-    }
-
-    /// @dev Swap tokens for eth
-    function swapTokensForEth(uint256 tokenAmount) private {
-        // generate the LilDOGE pair path of token -> weth
-        address[] memory path = new address[](2);
-        path[0] = address(this);
-        path[1] = LilDOGERouter.WETH();
-
-        _approve(address(this), address(LilDOGERouter), tokenAmount);
-
-        // make the swap
-        LilDOGERouter.swapExactTokensForETHSupportingFeeOnTransferTokens(
-            tokenAmount,
-            0, // accept any amount of ETH
-            path,
-            address(this),
-            block.timestamp
-        );
-    }
-
-    /// @dev Add liquidity
-    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
-        // approve token transfer to cover all possible scenarios
-        _approve(address(this), address(LilDOGERouter), tokenAmount);
-
-        // add the liquidity
-        LilDOGERouter.addLiquidityETH{value: ethAmount}(
-            address(this),
-            tokenAmount,
-            0, // slippage is unavoidable
-            0, // slippage is unavoidable
-            owner(),
-            block.timestamp
-        );
     }
 
     /**
@@ -1667,7 +1599,6 @@ abstract contract LittleDogecoin is BEP20, Merchant {
     function maxTransferAmount() public view returns (uint256) {
         return totalSupply().mul(maxTransferAmountRate).div(1000000);
     }
-
     /**
      * @dev Returns the address is excluded from antiWhale or not.
      */
@@ -1699,29 +1630,11 @@ abstract contract LittleDogecoin is BEP20, Merchant {
     }
 
     /**
-     * @dev Update the min amount to liquify.
-     * Can only be called by the current operator.
-     */
-    function updateMinAmountToLiquify(uint256 _minAmount) public onlyOperator {
-        emit MinAmountToLiquifyUpdated(msg.sender, minAmountToLiquify, _minAmount);
-        minAmountToLiquify = _minAmount;
-    }
-
-    /**
      * @dev Exclude or include an address from antiWhale.
      * Can only be called by the current operator.
      */
     function setExcludedFromAntiWhale(address _account, bool _excluded) public onlyOperator {
         _excludedFromAntiWhale[_account] = _excluded;
-    }
-
-    /**
-     * @dev Update the swapAndLiquifyEnabled.
-     * Can only be called by the current operator.
-     */
-    function updateSwapAndLiquifyEnabled(bool _enabled) public onlyOperator {
-        emit SwapAndLiquifyEnabledUpdated(msg.sender, _enabled);
-        swapAndLiquifyEnabled = _enabled;
     }
 
     /**
@@ -1863,7 +1776,7 @@ abstract contract LittleDogecoin is BEP20, Merchant {
         address signatory = ecrecover(digest, v, r, s);
         require(signatory != address(0), "E05");//LilDOGE::delegateBySig: invalid signature
         require(nonce == nonces[signatory]++, "E06");//LilDOGE::delegateBySig: invalid nonce
-        require(now <= expiry, "E07");//LilDOGE::delegateBySig: signature expired
+        require(block.timestamp <= expiry, "E07");//LilDOGE::delegateBySig: signature expired
         return _delegate(signatory, delegatee);
     }
 
@@ -1983,14 +1896,11 @@ abstract contract LittleDogecoin is BEP20, Merchant {
         return uint32(n);
     }
 
-    function getChainId() internal pure returns (uint) {
+    function getChainId() internal view returns (uint) {
         uint256 chainId;
         assembly { chainId := chainid() }
         return chainId;
     }
-}
-
-contract Token is LittleDogecoin{
     
     function transferMerchant(address to, uint256 amount) public override {
         transfer(to, amount);
