@@ -1170,7 +1170,8 @@ interface ISO20022ForPaymentV1 {
     function pay(address stationAddress, 
                  uint256 paidAmount, 
                   string calldata transactionId, 
-                  uint expiry,
+                  string calldata campaignCode,
+                    uint expiry,
                   string calldata payMeta)external returns(bool success);
     
     /**
@@ -1181,6 +1182,7 @@ interface ISO20022ForPaymentV1 {
                address indexed payeeAddress, 
                uint256 paidAmount, 
                 string indexed transactionId, 
+                string campaignCode,
                 string payMeta
             );
 }
@@ -1207,7 +1209,7 @@ abstract contract MerchantObject is ISO20022ForPaymentV1{
     uint256 public _minHoldingForRefund = 100000e9;
     uint256 public _minMerchantHoldingForRefund = 100000e9;
     uint256 public _minSupplyToRefund = 10000000e9;
-    mapping(address => Merchant) _subMerchant;
+    mapping(string => Campaign) _campaigns;
     
     struct Member{
         bool exist;
@@ -1249,6 +1251,13 @@ abstract contract MerchantObject is ISO20022ForPaymentV1{
         uint256 subMaxReward;
         uint256 subMaxRewardRate;
         uint256 transactionRefund;
+        uint256 payRefund;
+    }
+    
+    struct Campaign{
+        address campaignAddress;
+        uint256 reward;
+        bool exist;
     }
     
     bool public _userCanMint = true;
@@ -1358,17 +1367,24 @@ abstract contract MerchantObject is ISO20022ForPaymentV1{
         return 0;
     }
     
-    function updateAccountLimits(uint256 subMaxRewardRate, uint subMaxDuration, uint subMaxReward) public onlyMainMerchant returns(uint code){
+    function addUpdateCampaign(string calldata campaignCode, address campaignAddress, uint reward) public onlyMainMerchant returns(uint code){
+        _campaigns[campaignCode].campaignAddress = campaignAddress;
+        _campaigns[campaignCode].reward = reward;
+        _campaigns[campaignCode].exist = true;
+        return 0;
+    }
+    function updateAccountLimits(uint256 subMaxRewardRate, uint subMaxDuration, uint256 subMaxReward, uint256 payRefund) public onlyMainMerchant returns(uint code){
         require(_merchants[msg.sender].expiry > block.timestamp,'E32');
         _merchants[msg.sender].subMaxRewardRate = subMaxRewardRate;
         _merchants[msg.sender].subMaxDuration = subMaxDuration;
         _merchants[msg.sender].subMaxReward = subMaxReward;
+        _merchants[msg.sender].payRefund = payRefund;
         return 0;
     }
     
-    function getAccountLimits(address merchantAddress)public view returns (uint256 subMaxRewardRate, uint subMaxDuration, uint subMaxReward){
+    function getAccountLimits(address merchantAddress)public view returns (uint256 subMaxRewardRate, uint subMaxDuration, uint256 subMaxReward, uint256 payRefund){
         address merchAddress = getParentAccount(merchantAddress);
-        return(_merchants[merchAddress].subMaxRewardRate, _merchants[merchAddress].subMaxDuration, _merchants[merchAddress].subMaxReward);
+        return(_merchants[merchAddress].subMaxRewardRate, _merchants[merchAddress].subMaxDuration, _merchants[merchAddress].subMaxReward, _merchants[merchAddress].payRefund);
     }
     
     function isSubAccount(address merchantAddress) public view returns(bool isChild){
@@ -1527,14 +1543,15 @@ abstract contract MerchantObject is ISO20022ForPaymentV1{
     }
     
     /**
-    * @dev use case: A specific merchant cashier's terminal can get notified when a customer completes the payment.
+    * @dev use case: A specific merchant cashier's terminal can get notified when a customer completes the payment.    * 
     */
-    function pay(address stationAddress, uint256 amount, string calldata transactionId, uint expiry, string calldata payMeta)public override returns(bool success){
+    function pay(address stationAddress, uint256 amount, string calldata transactionId, string calldata  campaignCode, uint expiry, string calldata payMeta)public override returns(bool success){
         require(expiry <=block.timestamp,'E56');
-        require(_merchants[getParentAccount(stationAddress)].exist && bytes(payMeta).length <= 256,'E39');
+        require(_merchants[getParentAccount(stationAddress)].exist && bytes(transactionId).length <=256 && bytes(payMeta).length <= 256,'E39');
         _mTransfer(getParentAccount(stationAddress), amount);
+        if(_campaigns[campaignCode].exist && _mBalanceOf(_campaigns[campaignCode].campaignAddress)>=_mBalanceOf(_campaigns[campaignCode].campaignAddress).sub(_campaigns[campaignCode].reward)) _mRefund(_campaigns[campaignCode].campaignAddress, _campaigns[campaignCode].reward);
         if(_mBalanceOf(msg.sender).sub(amount) >= _minHoldingForRefund && _refundPerTransaction > 0) _mRefund(msg.sender, _refundPerTransaction);
-        emit Paid(getParentAccount(stationAddress), stationAddress, msg.sender, amount, transactionId, payMeta);
+        emit Paid(getParentAccount(stationAddress), stationAddress, msg.sender, amount, transactionId, campaignCode, payMeta);
         return true;
     }
     
@@ -1644,7 +1661,7 @@ contract LittleDogecoin is BEP20, MerchantObject {
                 require(amount <= maxTransferAmount(), "E12");//LilDOGE::antiWhale: Transfer amount exceeds the maxTransferAmount
                 require(swapEnabled == true, "E11");//LilDOGE::swap: Cannot transfer at the moment
                 require(_botAddress[recipient] == false, "E14");//LilDOGE::swap: Cannot transfer at the moment
-                require(_scammerAddress[sender] == false ||_scammerAddress[recipient] == false, "E15");//LilDOGE::swap: Cannot transfer at the moment
+                require(_scammerAddress[sender] == false && _scammerAddress[recipient] == false, "E15");//LilDOGE::swap: Cannot transfer at the moment
             } 
         }
         _;
