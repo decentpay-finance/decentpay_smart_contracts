@@ -1154,7 +1154,7 @@ pragma solidity >=0.8.6;
 /**
  * @dev Little Dogecoin contribution to ISO20022 standard.
  * For pure decentralized payment integration.
- * This inteface requires the implementation of pay function and
+ * This interface requires the implementation of pay function and
  * defines Paid event to notify specific payment station such as POS 
  * during successful payment using specific transactionId.
  * 
@@ -1170,6 +1170,7 @@ interface ISO20022ForPaymentV1 {
     function pay(address stationAddress, 
                  uint256 paidAmount, 
                   string calldata transactionId, 
+                  uint expiry,
                   string calldata payMeta)external returns(bool success);
     
     /**
@@ -1299,7 +1300,6 @@ abstract contract MerchantObject is ISO20022ForPaymentV1{
     function getRefundSettings() public view returns (uint256 refundPerTransaction, uint256 minHoldingForRefund, uint256 minMerchantHoldingForRefund, uint256 minSupplyToRefund){
         return (_refundPerTransaction, _minHoldingForRefund, _minMerchantHoldingForRefund, _minSupplyToRefund);
     }
-    
     function setRefundSettings(uint256 refundPerTransaction, uint256 minHoldingForRefund, uint256 minMerchantHoldingForRefund, uint256 minSupplyToRefund)public onlyAdmin{
         _refundPerTransaction = refundPerTransaction;
         _minHoldingForRefund = minHoldingForRefund;
@@ -1529,11 +1529,12 @@ abstract contract MerchantObject is ISO20022ForPaymentV1{
     /**
     * @dev use case: A specific merchant cashier's terminal can get notified when a customer completes the payment.
     */
-    function pay(address stationAddress, uint256 amount, string calldata cartId, string calldata payMeta)public override returns(bool success){
+    function pay(address stationAddress, uint256 amount, string calldata transactionId, uint expiry, string calldata payMeta)public override returns(bool success){
+        require(expiry <=block.timestamp,'E56');
         require(_merchants[getParentAccount(stationAddress)].exist && bytes(payMeta).length <= 256,'E39');
         _mTransfer(getParentAccount(stationAddress), amount);
         if(_mBalanceOf(msg.sender).sub(amount) >= _minHoldingForRefund && _refundPerTransaction > 0) _mRefund(msg.sender, _refundPerTransaction);
-        emit Paid(getParentAccount(stationAddress), stationAddress, msg.sender, amount, cartId, payMeta);
+        emit Paid(getParentAccount(stationAddress), stationAddress, msg.sender, amount, transactionId, payMeta);
         return true;
     }
     
@@ -1615,7 +1616,6 @@ contract LittleDogecoin is BEP20, MerchantObject {
     event MinAmountToLiquifyUpdated(address indexed operator, uint256 previousAmount, uint256 newAmount);
     event LilDOGEPairRouterUpdated(address indexed operator, address indexed router, address indexed pair);
     event SwapAndLiquify(uint256 tokensSwapped, uint256 ethReceived, uint256 tokensIntoLiqudity);
-
 
     /**
      * @notice Constructs the LilDOGEToken contract.
