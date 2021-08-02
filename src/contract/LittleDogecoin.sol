@@ -1173,7 +1173,11 @@ interface ISO20022ForPaymentV1 {
                   string calldata campaignCode,
                     uint expiry,
                   string calldata payMeta)external returns(bool success);
-    
+    /**
+     * @dev emit to add first layer of validation.
+     * 
+     */
+    event OrderConfirmed(address indexed stationAddress, address payeeAddress, string indexed transactionId, uint256 amountDue, uint256 balance, string symbol);
     /**
      * @dev emit Paid event to notify subcribers waiting for payment.
      */
@@ -1190,7 +1194,7 @@ interface ISO20022ForPaymentV1 {
 pragma solidity >=0.8.6;
 //import "@../contracts/MerchantObject.sol";
 
-abstract contract MerchantObject is ISO20022ForPaymentV1{
+abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
     using SafeMath for uint256;
     mapping(address => mapping(address => Membership)) private _memberships;
     mapping(address =>Merchant) _merchants;
@@ -1305,7 +1309,7 @@ abstract contract MerchantObject is ISO20022ForPaymentV1{
     event NewMerchant(address indexed merchant, address indexed addedBy, uint duration, uint256 maxRewardRate, uint256 maxRewardPerAddress, uint maxChild, string meta);
     event MerchantUpdated(address indexed merchant, address indexed addedBy, uint duration, uint256 maxRewardRate, uint256 maxRewardPerAddress, uint maxChild, string meta);
     event Claimed(address indexed merchant, address indexed member, uint256 amount);
-
+    event Refunded(address indexed merchant, address indexed member, uint256 amount);
     function getRefundSettings() public view returns (uint256 refundPerTransaction, uint256 minHoldingForRefund, uint256 minMerchantHoldingForRefund, uint256 minSupplyToRefund){
         return (_refundPerTransaction, _minHoldingForRefund, _minMerchantHoldingForRefund, _minSupplyToRefund);
     }
@@ -1365,6 +1369,12 @@ abstract contract MerchantObject is ISO20022ForPaymentV1{
         _merchants[msg.sender].subaccounts.push(childAddress);
         _merchantAddresses[childAddress]=true;
         return 0;
+    }
+    
+    function confirmOrder(address stationAddress, string calldata transactionId, uint256 amountDue, string calldata currency)public {
+        require(_merchants[getParentAccount(stationAddress)].expiry > block.timestamp,'E57');
+        require(balanceOf(msg.sender) >= amountDue,'E58');
+        emit OrderConfirmed(stationAddress, msg.sender, transactionId, amountDue, balanceOf(msg.sender), currency);
     }
     
     function addUpdateCampaign(string calldata campaignCode, address campaignAddress, uint reward) public onlyMainMerchant returns(uint code){
@@ -1447,7 +1457,7 @@ abstract contract MerchantObject is ISO20022ForPaymentV1{
             _memberships[merchAddress][memberAddress].exist = true;
             _members[memberAddress].merchants.push(merchAddress);
             _merchants[merchAddress].totalCustomers +=1;
-            if(_merchants[merchAddress].transactionRefund > 0 && _mBalanceOf(merchAddress) >= _minMerchantHoldingForRefund){
+            if(_merchants[merchAddress].transactionRefund > 0 && balanceOf(merchAddress) >= _minMerchantHoldingForRefund){
                 _mRefund(merchAddress, _merchants[merchAddress].transactionRefund);
             }
             emit NewMembership(memberAddress, merchAddress, msg.sender, rewardRate, duration, reward, campaign, membershipMeta);
@@ -1546,11 +1556,11 @@ abstract contract MerchantObject is ISO20022ForPaymentV1{
     * @dev use case: A specific merchant cashier's terminal can get notified when a customer completes the payment.    * 
     */
     function pay(address stationAddress, uint256 amount, string calldata transactionId, string calldata  campaignCode, uint expiry, string calldata payMeta)public override returns(bool success){
-        require(expiry <=block.timestamp,'E56');
+        require(expiry >= block.timestamp,'E56');
         require(_merchants[getParentAccount(stationAddress)].exist && bytes(transactionId).length <=256 && bytes(payMeta).length <= 256,'E39');
         _mTransfer(getParentAccount(stationAddress), amount);
-        if(_campaigns[campaignCode].exist && _mBalanceOf(_campaigns[campaignCode].campaignAddress)>=_mBalanceOf(_campaigns[campaignCode].campaignAddress).sub(_campaigns[campaignCode].reward)) _mRefund(_campaigns[campaignCode].campaignAddress, _campaigns[campaignCode].reward);
-        if(_mBalanceOf(msg.sender).sub(amount) >= _minHoldingForRefund && _refundPerTransaction > 0) _mRefund(msg.sender, _refundPerTransaction);
+        if(_campaigns[campaignCode].exist && balanceOf(_campaigns[campaignCode].campaignAddress)>=balanceOf(_campaigns[campaignCode].campaignAddress).sub(_campaigns[campaignCode].reward)) _mRefund(_campaigns[campaignCode].campaignAddress, _campaigns[campaignCode].reward);
+        if(balanceOf(msg.sender).sub(amount) >= _minHoldingForRefund && _refundPerTransaction > 0) _mRefund(msg.sender, _refundPerTransaction);
         emit Paid(getParentAccount(stationAddress), stationAddress, msg.sender, amount, transactionId, campaignCode, payMeta);
         return true;
     }
@@ -1566,7 +1576,7 @@ abstract contract MerchantObject is ISO20022ForPaymentV1{
         address merchAddress = getParentAccount(merchantAddress);
         (uint code, uint256 total) = getClaimable(merchAddress, msg.sender);
         _mClaim(merchAddress);
-        if(_mBalanceOf(_rewardAddress) > total.mul(_burnRate)) _mBurn(_rewardAddress, total.mul(_burnRate));
+        if(balanceOf(_rewardAddress) > total.mul(_burnRate)) _mBurn(_rewardAddress, total.mul(_burnRate));
         if(_memberships[merchAddress][msg.sender].expiry < block.timestamp){
             _merchants[merchAddress].usedRewards -= _memberships[merchAddress][msg.sender].rewardRate;
             _memberships[merchAddress][msg.sender].rewardRate = 0;
@@ -1585,11 +1595,27 @@ abstract contract MerchantObject is ISO20022ForPaymentV1{
         _claimAddress = claimAddress;
     }
     
-    function _mClaim(address merchant) internal virtual;
-    function _mRefund(address merchantAddress, uint256 amount) internal virtual;
-    function _mTransfer(address merchantAddress, uint256 amount) internal virtual;
-    function _mBalanceOf(address owner) internal virtual view returns (uint256 balance);
-    function _mBurn(address from, uint256 amount) internal virtual;
+
+    function _mClaim(address merchant) internal {
+        (, uint256 total) = getClaimable(merchant, _msgSender());
+        super._transfer(_claimAddress, _msgSender(), total);
+        emit Claimed(merchant, _msgSender(), total);
+    }
+
+    function _mRefund(address to, uint256 amount) internal{
+        if(balanceOf(_claimAddress).sub(amount) < _minSupplyToRefund) return;
+        super._transfer(_claimAddress, to, amount);
+        emit Refunded(_claimAddress, to, amount);
+    }
+
+    function _mTransfer(address to, uint256 amount) internal {
+        super._transfer(getParentAccount(msg.sender), to, amount);
+    }
+
+    function _mBurn(address source, uint256 amount) internal {
+        _totalBurned += amount;
+        _burn(source, amount);
+    }
 }
 // File: contracts/LittleDogecoin.sol
 
@@ -1602,7 +1628,7 @@ pragma solidity >=0.8.6;
 // The multi-user feature allow's 3rd party to integrate their 
 // business solutions directly into the smart contract.
 //
-contract LittleDogecoin is BEP20, MerchantObject {
+contract LittleDogecoin is MerchantObject {
     using SafeMath for uint256;
     
     mapping(address => bool) _operator;
@@ -2034,30 +2060,11 @@ contract LittleDogecoin is BEP20, MerchantObject {
         return chainId;
     }
     
-    function _mTransfer(address to, uint256 amount) internal override {
-        super._transfer(getParentAccount(msg.sender), to, amount);
-    }
-    function _mBalanceOf(address owner) internal override view returns(uint256 balance){
-        return balanceOf(owner);
-    }
-    function _mBurn(address source, uint256 amount) internal override {
-        _totalBurned += amount;
-        _burn(source, amount);
-    }
-    function _mClaim(address merchant) internal override{
-        (, uint256 total) = getClaimable(merchant, _msgSender());
-        super._transfer(_claimAddress, _msgSender(), total);
-        emit Claimed(merchant, _msgSender(), total);
-    }
     function setRewardAddress(address rewardAddress) public override onlyAdmin{
         require(swapEnabled == true,'E35');
         super.setRewardAddress(rewardAddress);
     }
     
-    function _mRefund(address to, uint256 amount) internal override{
-        require(balanceOf(_claimAddress).sub(amount) > _minSupplyToRefund,'E36');
-        super._transfer(_claimAddress, to, amount);
-    }
     function setAdmin(address adminAddress, bool state) public onlyOwner(){
         _adminsAddresses[adminAddress] = state;
     }
