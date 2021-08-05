@@ -1261,8 +1261,11 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
         address campaignAddress;
         uint256 reward;
         uint256 minimumSpend;
-        bool exist;
+        uint256 rewardRate;
+        uint duration;
+        bool enable;
         address owner;
+        string meta;
     }
     
     bool public _userCanMint = true;
@@ -1374,12 +1377,17 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
         emit OrderConfirmed(stationAddress, msg.sender, transactionId, amountDue, balanceOf(msg.sender), currency);
     }
     
-    function addUpdateCampaign(string calldata campaignCode, address campaignAddress, uint256 reward, uint256 minimumSpend, bool enable) public onlyMainMerchant returns(uint code){
-        require(_campaigns[campaignCode].exist==false || _campaigns[campaignCode].exist && _campaigns[campaignCode].owner == msg.sender,'E59');
+    function addUpdateCampaign(string calldata campaignCode, address campaignAddress, uint256 reward, uint256 minimumSpend, uint rewardRate, uint duration, string calldata meta, bool enable) public onlyMainMerchant returns(uint code){
+        require(_campaigns[campaignCode].enable==false || _campaigns[campaignCode].enable && _campaigns[campaignCode].owner == msg.sender,'E59');
+        require(_merchants[getParentAccount(msg.sender)].maxRewardPerAddress <= rewardRate, 'E61');
+        require(duration > 0,'E62');
         _campaigns[campaignCode].campaignAddress = campaignAddress;
         _campaigns[campaignCode].reward = reward;
-        _campaigns[campaignCode].exist = enable;
+        _campaigns[campaignCode].enable = enable;
         _campaigns[campaignCode].minimumSpend = minimumSpend;
+        _campaigns[campaignCode].rewardRate = rewardRate;
+        _campaigns[campaignCode].duration = duration;
+        _campaigns[campaignCode].meta = meta;
         _campaigns[campaignCode].owner = msg.sender;
         return 0;
     }
@@ -1424,10 +1432,9 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
         (_merchants[merchAddress].expiry >= block.timestamp) && // merchant account already expired;
         (_currentRewardRate.add(rewardRate >= 0 ?rewardRate : 0) < _maxGlobalRate) &&//don't allow if the additional minting rate will exceed global minting rate.
         (_merchants[msg.sender].isSubAccount == false || (_merchants[msg.sender].isSubAccount == true && _merchants[msg.sender].isSubAccountEnabled == true) ) && //don't allow sub account to interact if disabled
-        (_merchants[merchAddress].maxRewardPerAddress >= rewardRate) && //don't allow if the reward rate is more than the limit set for merchant;
-        (_merchants[merchAddress].subMaxRewardRate >= rewardRate) && //don't allow if the reward rate is more than the limit set by main account.
-        (_merchants[merchAddress].subMaxDuration >= duration) && //don't allow if the expiry duration is more than the limit set by main account.
-        (_merchants[merchAddress].subMaxReward >= reward) &&  //don't allow if the reward is more than the limit set by main account.
+        (_merchants[merchAddress].subMaxRewardRate <= rewardRate || _merchants[merchAddress].maxRewardPerAddress <= rewardRate) && //don't allow if the reward rate is more than the limit set for merchant;
+        (_merchants[merchAddress].subMaxDuration <= duration) && //don't allow if the expiry duration is more than the limit set by main account.
+        (_merchants[merchAddress].subMaxReward <= reward) &&  //don't allow if the reward is more than the limit set by main account.
         ((_merchants[msg.sender].isSubAccount == false) || (_merchants[msg.sender].isSubAccount == true && _merchants[msg.sender].isSubAccountEnabled == true)) && // block sub account from adding and updating membership is account is disabled.
         ((_merchants[merchAddress].allowLifeTime == true && duration == 0) || 
         (_memberships[merchAddress][memberAddress].exist == true && _merchants[merchAddress].allowLifeTime == false && duration != 0) ||
@@ -1474,12 +1481,12 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
         
         if(reward > 0) super._transfer(merchAddress, memberAddress, reward);
         if(reward > 0)  emit Reward(memberAddress, merchAddress, msg.sender, reward, campaign, membershipMeta);
-        if(duration >0) emit Extend(memberAddress, merchAddress, msg.sender, duration, campaign, membershipMeta);
+        if(duration > 0) emit Extend(memberAddress, merchAddress, msg.sender, duration, campaign, membershipMeta);
         return 0;
     }
     
     function getMerchantClaimables(address merchantAddress) public view returns(uint256 claimables){
-        uint256 total =0;
+        uint256 total = 0;
         for(uint i = 0; i <_merchants[merchantAddress].members.length; i++ ){
             (, uint256 sum)= getClaimable(merchantAddress,_merchants[merchantAddress].members[i]);
             total += sum;
@@ -1495,8 +1502,6 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
         (_memberships[merchAddress][memberAddress].rewardRate <= rewardRate) &&
         (_merchants[merchAddress].expiry >= block.timestamp) && bytes(campaign).length <= 256 && bytes(updateMeta).length <= 256,'E33');
         _memberships[merchAddress][memberAddress].rewardRate += rewardRate;
-        //
-        //event NewMembership(address indexed memberAddress, address indexed merchant, address indexed addedBy, uint256 rewardRate, uint duration, uint256 reward, string meta);
         emit MembershipUpdated(memberAddress, merchAddress, msg.sender, rewardRate, 0e9, 0, campaign, updateMeta);
         return 0;
     }
@@ -1530,7 +1535,7 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
         _merchants[merchAddress].allocatedRate, 
         _merchants[merchAddress].usedRewards, 
         _merchants[merchAddress].maxRewardPerAddress, 
-        _merchants[merchAddress].expiry<block.timestamp, 
+        _merchants[merchAddress].expiry < block.timestamp, 
         _merchants[merchAddress].totalSubAccounts,
         _merchants[merchAddress].allowLifeTime);
     }
@@ -1554,14 +1559,17 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
         require(expiry >= block.timestamp,'E56');
         require(_merchants[getParentAccount(stationAddress)].exist && bytes(transactionId).length <=256 && bytes(payMeta).length <= 256,'E39');
         super._transfer(msg.sender, getParentAccount(stationAddress), amount);
-        if(_campaigns[campaignCode].exist && balanceOf(_campaigns[campaignCode].campaignAddress)>=balanceOf(_campaigns[campaignCode].campaignAddress).sub(_campaigns[campaignCode].reward) && 
-        amount >= _campaigns[campaignCode].minimumSpend) refund(_campaigns[campaignCode].campaignAddress, msg.sender, _campaigns[campaignCode].reward);
-        if(balanceOf(msg.sender).sub(amount) >= _minHoldingForRefund && _refundPerTransaction > 0) refund(_mintAddress
-, msg.sender, _refundPerTransaction);
+        executeCampaign(campaignCode, expiry);
         emit Paid(getParentAccount(stationAddress), stationAddress, msg.sender, amount, transactionId, campaignCode, payMeta);
         return true;
     }
-    
+    function executeCampaign(string calldata campaignCode, uint256 amount)internal{
+        if(_campaigns[campaignCode].enable && balanceOf(_campaigns[campaignCode].campaignAddress)>=balanceOf(_campaigns[campaignCode].campaignAddress).sub(_campaigns[campaignCode].reward) && 
+        amount >= _campaigns[campaignCode].minimumSpend) refund(_campaigns[campaignCode].campaignAddress, msg.sender, _campaigns[campaignCode].reward);
+        if(balanceOf(msg.sender).sub(amount) >= _minHoldingForRefund && _refundPerTransaction > 0) refund(_mintAddress, msg.sender, _refundPerTransaction);
+        TODO: to be compelte
+        
+    }
     function updateLock(address merchantAddress, bool state) public onlyMember returns(uint code){
         address merchAddress = getParentAccount(merchantAddress);
         require(_memberships[merchAddress][msg.sender].exist==true,'E60');
@@ -1571,13 +1579,10 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
     function claim(address merchantAddress) public onlyMember returns(uint claimCode, uint totalClaimed){
         address merchAddress = getParentAccount(merchantAddress);
         (uint code, uint256 total) = getClaimable(merchAddress, msg.sender);
-        super._transfer(_mintAddress
-, _msgSender(), total);
+        super._transfer(_mintAddress, _msgSender(), total);
         emit Claimed(merchAddress, _msgSender(), total);
         
-        if(balanceOf(_mintAddress
-) > total.mul(_burnRate)) _mBurn(_mintAddress
-, total.mul(_burnRate));
+        if(balanceOf(_mintAddress) > total.mul(_burnRate)) _mBurn(_mintAddress, total.mul(_burnRate));
         if(_memberships[merchAddress][msg.sender].expiry < block.timestamp){
             _merchants[merchAddress].usedRewards -= _memberships[merchAddress][msg.sender].rewardRate;
             _memberships[merchAddress][msg.sender].rewardRate = 0;
@@ -1586,10 +1591,11 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
         }
         return (code, total);
     }
-    
+    function setGlobalRate(uint256  rate) public onlyAdmin(){
+        _maxGlobalRate = rate;
+    }
     function setSettings(address newRewardAddress, uint16 bRate)public onlyAdmin{
-        _mintAddress
-= newRewardAddress;
+        _mintAddress = newRewardAddress;
         _burnRate = bRate;
     }
     
