@@ -1507,7 +1507,7 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
         //strings has limits;
         (bytes(membershipMeta).length  <= 256) && (bytes(campaign).length  <= 256),'E35'); 
         
-        return addUpdateMembershipInternal(memberAddress, merchAddress, rewardRate, duration, reward, campaign, membershipMeta);
+        return addUpdateMembershipInternal(memberAddress, merchAddress, duration, reward, rewardRate, campaign, membershipMeta);
     }
     
     function addUpdateMembershipInternal(address memberAddress, address merchAddress, uint duration, uint256 reward, uint256 rewardRate, string memory campaign, string memory membershipMeta)internal returns(uint code){
@@ -1535,21 +1535,23 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
             if(_memberships[merchAddress][memberAddress].expiry!=0 && duration > 0){
                 emit Extend(memberAddress, merchAddress, msg.sender, duration, campaign, membershipMeta);
             }
-            //
-            _memberships[merchAddress][memberAddress].expiry = _memberships[merchAddress][memberAddress].exist ?
-                                                                    _memberships[merchAddress][memberAddress].expiry < block.timestamp ? 
-                                                                        _memberships[merchAddress][memberAddress].expiry.add(block.timestamp.sub(_memberships[merchAddress][memberAddress].expiry)).add(duration) : 
-                                                                        _memberships[merchAddress][memberAddress].expiry.add(duration) : 
-                                                                    block.timestamp.add(duration);
+            
+            if(_memberships[merchAddress][memberAddress].expiry !=0 ){
+                _memberships[merchAddress][memberAddress].expiry = _memberships[merchAddress][memberAddress].exist ?
+                                                                        _memberships[merchAddress][memberAddress].expiry < block.timestamp ? 
+                                                                            _memberships[merchAddress][memberAddress].expiry.add(block.timestamp.sub(_memberships[merchAddress][memberAddress].expiry)).add(duration) : 
+                                                                            _memberships[merchAddress][memberAddress].expiry.add(duration) : 
+                                                                        block.timestamp.add(duration);
+            }
             _memberships[merchAddress][memberAddress].rewardRate += rewardRate > 0 ? rewardRate : 0;
             emit MembershipUpdated(memberAddress, merchAddress, msg.sender, rewardRate, duration, reward, campaign, membershipMeta);
         }
         
         _memberships[merchAddress][memberAddress].membershipMeta = membershipMeta;
-        _merchants[merchAddress].usedRewards += rewardRate > 0 ? rewardRate : 0;
-        _currentRewardRate += rewardRate > 0 ? rewardRate : 0;//todo why the rewards are not set?
+        _merchants[merchAddress].usedRewards = _merchants[merchAddress].usedRewards.add(rewardRate);//todo why the rewards are not set?
+        _currentRewardRate = _currentRewardRate.add(rewardRate);//todo why the rewards are not set?
         
-        if(reward > 0x0) {//todo why still transfering?
+        if(reward !=0) {//todo why still transfering?
             _transfer(merchAddress, memberAddress, reward);
             emit Reward(memberAddress, merchAddress, msg.sender, reward, campaign, membershipMeta);
         }
