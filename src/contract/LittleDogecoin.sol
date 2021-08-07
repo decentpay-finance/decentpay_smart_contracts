@@ -23,7 +23,7 @@
 
 // File: @uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol
 
-pragma solidity >=0.8.6;
+pragma solidity >=0.5.0;
 
 interface IUniswapV2Factory {
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
@@ -43,7 +43,7 @@ interface IUniswapV2Factory {
 
 // File: @uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol
 
-pragma solidity >=0.8.6;
+pragma solidity >=0.5.0;
 
 interface IUniswapV2Pair {
     event Approval(address indexed owner, address indexed spender, uint value);
@@ -98,7 +98,7 @@ interface IUniswapV2Pair {
 
 // File: @uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router01.sol
 
-pragma solidity >=0.8.6;
+pragma solidity >=0.6.2;
 
 interface IUniswapV2Router01 {
     function factory() external pure returns (address);
@@ -196,8 +196,7 @@ interface IUniswapV2Router01 {
 
 // File: @uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol
 
-pragma solidity >=0.8.6;
-
+pragma solidity >=0.6.2;
 
 interface IUniswapV2Router02 is IUniswapV2Router01 {
     function removeLiquidityETHSupportingFeeOnTransferTokens(
@@ -1199,9 +1198,9 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
     mapping(address => mapping(address => Membership)) private _memberships;
     mapping(address =>Merchant) _merchants;
     mapping(address =>Member) _members;
+    mapping(string => Campaign) _campaigns;
     uint public _totalMembers = 0;
     uint public _totalMerchants = 0;
-    uint256 public _totalBurned;
     address public _mintAddress;
     mapping(address => bool) _adminsAddresses;
     mapping(address => bool) _merchantAddresses;
@@ -1212,7 +1211,6 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
     uint256 public _minHoldingForRefund = 100000e9;
     uint256 public _minMerchantHoldingForRefund = 100000e9;
     uint256 public _minSupplyToRefund = 10000000e9;
-    mapping(string => Campaign) _campaigns;
     
     address public _busd = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
     uint public blockTimeStamp = block.timestamp;
@@ -1285,8 +1283,7 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
     //}
     bool public _userCanMint;// = true;
     uint public _lastMint = block.timestamp;
-    uint256 public _maxMintingRate;// = 166666666700;
-    uint256 public _maxGlobalRate;// = 14000000e9;
+    uint256 public _maxGlobalRate = 14000000e9;
     uint256 public _totalMinted;
     /**
      * @dev Throws if called by any account other than the Merchant.
@@ -1329,9 +1326,10 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
     event MerchantUpdated(address indexed merchant, address indexed addedBy, uint duration, bool allowLifeTime, uint256 maxRewardRate, uint256 maxRewardPerAddress, uint maxChild, string meta);
     event Claimed(address indexed merchant, address indexed member, uint256 amount);
     event Refunded(address indexed merchant, address indexed member, uint256 amount);
-    
-    function getRefundSettings() public view returns (uint256 refundPerTransaction, uint256 minHoldingForRefund, uint256 minMerchantHoldingForRefund, uint256 minSupplyToRefund){
-        return (_refundPerTransaction, _minHoldingForRefund, _minMerchantHoldingForRefund, _minSupplyToRefund);
+     /** Returns the Current Price of the Token */
+    function calculatePrice() public view returns (uint256) {
+        uint256 busdBalance = IBEP20(_busd).balanceOf(address(this));
+        return busdBalance.div(_totalSupply);
     }
     function setRefundSettings(uint256 refundPerTransaction, uint256 minHoldingForRefund, uint256 minMerchantHoldingForRefund, uint256 minSupplyToRefund)public onlyAdmin{
         _refundPerTransaction = refundPerTransaction;
@@ -1559,11 +1557,14 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
     function getMerchantClaimables(address merchantAddress) public view returns(uint256 claimables){
         uint256 total;
         for(uint i = 0; i <_merchants[merchantAddress].members.length; i++ ){
-            (, uint256 sum)= getClaimable(merchantAddress,_merchants[merchantAddress].members[i]);
-            total += sum;
+            total += getClaimable(merchantAddress,_merchants[merchantAddress].members[i]);
         }
         return total;
-    }    
+    }
+    
+    function updateUsedRewardRate()public onlyMerchant{
+        _merchants[getParentAccount(msg.sender)].usedRewards = getMerchantHashRate(getParentAccount(msg.sender));
+    }
     function updateLifeTimeMembership(address memberAddress, uint256 rewardRate, string calldata campaign, string calldata updateMeta)public onlyMerchant{
         address merchAddress = getParentAccount(msg.sender);
         require((_merchants[getParentAccount(msg.sender)].maxRewardPerAddress >= _memberships[merchAddress][memberAddress].rewardRate.add(rewardRate)) &&
@@ -1575,7 +1576,7 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
         emit MembershipUpdated(memberAddress, merchAddress, msg.sender, rewardRate, 0e9, 0, campaign, updateMeta);
     }
     
-    function getClaimable(address merchantAddress, address memberAddress) public view returns(uint code, uint256 unclaimed){
+    function getClaimable(address merchantAddress, address memberAddress) public view returns(uint256 unclaimed){
         address merchAddress = getParentAccount(merchantAddress);
         uint span;
         if(_memberships[merchAddress][memberAddress].expiry == 0){
@@ -1583,17 +1584,17 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
         }else{
             span = _memberships[merchAddress][memberAddress].expiry > block.timestamp? block.timestamp.sub(_memberships[merchAddress][memberAddress].startDate) : _memberships[merchAddress][memberAddress].expiry.sub(_memberships[merchAddress][memberAddress].startDate);
         }
-        return (0, span.mul(_memberships[merchAddress][memberAddress].rewardRate));
+        return (span.mul(_memberships[merchAddress][memberAddress].rewardRate));
     }
     
-    function getMembershipInfo(address merchantAddress, address memberAddress) public view returns(uint256 rate, uint expiry, uint startDate, string memory meta, bool locked) {
+    function getMembershipInfo(address merchantAddress, address memberAddress) public view returns(uint256 rewardRate, uint expiry, uint startDate, string memory membershipMeta, bool locked, uint256 claimable) {
         address merchAddress = getParentAccount(merchantAddress);
         return (_memberships[merchAddress][memberAddress].rewardRate,
             _memberships[merchAddress][memberAddress].expiry,
             _memberships[merchAddress][memberAddress].startDate,
             _memberships[merchAddress][memberAddress].membershipMeta,
-            _memberships[merchAddress][memberAddress].locked
-        );
+            _memberships[merchAddress][memberAddress].locked,
+            getClaimable(merchAddress,memberAddress));
     }
     
     function getMerchantInfo1(address merchantAddress)public view returns(uint totalCustomers, uint expiry, uint256 allocatedRate, uint256 usedRewards, uint256 maxRewardPerAddress, bool isExpired, uint totalSubAccount, bool allowLifeTime){
@@ -1685,22 +1686,21 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
         return 0;
     }
     
-    function claim(address merchantAddress) public onlyMember returns(uint claimCode, uint totalClaimed){
+    function claim(address merchantAddress) public onlyMember returns(uint totalClaimed){
         address merchAddress = getParentAccount(merchantAddress);
-        (uint code, uint256 total) = getClaimable(merchAddress, msg.sender);
+        uint256 total = getClaimable(merchAddress, msg.sender);
         super._transfer(_mintAddress, _msgSender(), total);
         emit Claimed(merchAddress, _msgSender(), total);
         
-        if(balanceOf(_mintAddress) > total.mul(_burnRate)) _mBurn(_mintAddress, total.mul(_burnRate));
+        if(balanceOf(_mintAddress) > total.mul(_burnRate)) _burn(_mintAddress, total.mul(_burnRate));//todo figureout how
         if(_memberships[merchAddress][msg.sender].expiry!=0 && _memberships[merchAddress][msg.sender].expiry < block.timestamp){
             _merchants[merchAddress].usedRewards -= _memberships[merchAddress][msg.sender].rewardRate;
             _currentRewardRate-=_memberships[merchAddress][msg.sender].rewardRate;
-            _merchants[merchantAddress].usedRewards -= _memberships[merchAddress][msg.sender].rewardRate;
             _memberships[merchAddress][msg.sender].rewardRate = 0;
         } else {
             _memberships[merchAddress][msg.sender].startDate = block.timestamp;
         }
-        return (code, total);
+        return total;
     }
     
     function setMintNRateSettings(uint256  mintRate, uint16 burnRate)public onlyAdmin{
@@ -1714,11 +1714,6 @@ abstract contract MerchantObject is BEP20, ISO20022ForPaymentV1{
         emit Refunded(from, to, amount);
     }
 
-    function _mBurn(address source, uint256 amount) internal {
-        _totalBurned += amount;
-        _burn(source, amount);
-    }
-    
     function setAdmin(address adminAddress, bool state) public onlyOwner(){
         _adminsAddresses[adminAddress] = state;
     }
@@ -1825,9 +1820,6 @@ contract LittleDogecoin is MerchantObject {
     
     function setPatentMeta(string calldata patentMeta) public onlyOwner{
         _patentMetaData = patentMeta;
-    }
-    function updateMintingRate(uint256 rate)public onlyAdmin{
-        _maxMintingRate = rate;
     }
     function updateUserCanMint(bool state)public  onlyOperator{
         _userCanMint = state;
