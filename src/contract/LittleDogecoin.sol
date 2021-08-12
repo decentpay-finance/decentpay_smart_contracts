@@ -1839,8 +1839,6 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
             amountDue = amountDue.sub(amountDue,'E85').mul(1).div(1000);//take 0.1% fee
         }
         
-        // make the swap
-        //swapTokensForExactTokens
         LilDOGERouter.swapTokensForExactTokens(
             amountDue,
             amountDue.add(amountDue).mul(slippage).div(1000),//
