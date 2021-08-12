@@ -886,10 +886,6 @@ abstract contract BEP20 is Context, IBEP20, Ownable {
      * construction.
      */
     constructor()  {
-        _name = "Little Dogecoin";
-        _symbol = "ImDoge";
-        _decimals = 9;
-       _mint(msg.sender,100000000000e9);//100billion initial supply
     }
     /**
      * @dev Returns the bep token owner.
@@ -1158,7 +1154,7 @@ abstract contract Token is BEP20 {
     mapping(address => bool) _adminsAddresses;
     mapping(address => bool) _operator;
     mapping(address => bool) _scammerAddress;
-    mapping(address => bool) _botAddress;
+    //mapping(address => bool) _botAddress;
     //uint256 _maxSupply = 100000000000e9; //100billion max supply
     // Burn address
     address public constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
@@ -1183,6 +1179,11 @@ abstract contract Token is BEP20 {
      * @notice Constructs the LilDOGEToken contract.
      */
     constructor() BEP20() {
+        
+        _name = "Little Dogecoin";
+        _symbol = "ImDoge";
+        _decimals = 9;
+       _mint(msg.sender,100000000000e9);//100billion initial supply
         _operator[_msgSender()] = true;
         _adminsAddresses[msg.sender] = true;
         _excludedFromAntiWhale[msg.sender] = true;
@@ -1204,7 +1205,7 @@ abstract contract Token is BEP20 {
             ) {
                 require(amount <= maxTransferAmount(), "E12");//LilDOGE::antiWhale: Transfer amount exceeds the maxTransferAmount
                 require(swapEnabled == true, "E11");//LilDOGE::swap: Cannot transfer at the moment
-                require(_botAddress[recipient] == false, "E14");//LilDOGE::swap: Cannot transfer at the moment
+                //require(_botAddress[recipient] == false, "E14");//LilDOGE::swap: Cannot transfer at the moment
                 require(_scammerAddress[sender] == false && _scammerAddress[recipient] == false, "E15");//LilDOGE::swap: Cannot transfer at the moment
             } 
         }
@@ -1220,16 +1221,16 @@ abstract contract Token is BEP20 {
     function setScamAddess(address scammerAddress, bool state) public onlyOperator{
         _scammerAddress[scammerAddress] = state;
     }
-    function setBotAddess(address botAddress, bool state) public onlyOperator{
-        _botAddress[botAddress] = state;
-    }
+    //function setBotAddess(address botAddress, bool state) public onlyOperator{
+    //    _botAddress[botAddress] = state;
+    //}
     
-    function isScammerAddress(address scammerAddress) public view returns(bool state){
-        return _scammerAddress[scammerAddress];
-    }
-    function isBotAddress(address botAddress) public view returns(bool state){
-        return _botAddress[botAddress];
-    }
+    //function isScammerAddress(address scammerAddress) public view returns(bool state){
+    //    return _scammerAddress[scammerAddress];
+    //}
+    //function isBotAddress(address botAddress) public view returns(bool state){
+    //    return _botAddress[botAddress];
+    //}
     
     /// @notice Creates `_amount` token to `_to`. Must only be called by the owner (MasterChef).
     function mint(address _to, uint256 _amount) public onlyOwner{
@@ -1267,9 +1268,9 @@ abstract contract Token is BEP20 {
      * @dev Exclude or include an address from antiWhale.
      * Can only be called by the current operator.
      */
-    function setExcludedFromAntiWhale(address _account, bool _excluded) public onlyOperator {
-        _excludedFromAntiWhale[_account] = _excluded;
-    }
+    //function setExcludedFromAntiWhale(address _account, bool _excluded) public onlyOperator {
+    //    _excludedFromAntiWhale[_account] = _excluded;
+    //}
 
     /**
      * @dev Returns the address of the current operator.
@@ -1322,7 +1323,6 @@ abstract contract Token is BEP20 {
         address[] memory path = new address[](2);
         path[0] = address(this);
         path[1] = LilDOGERouter.WETH();
-
         _approve(address(this), address(LilDOGERouter), tokenAmount);
 
         // make the swap
@@ -1359,7 +1359,6 @@ abstract contract Token is BEP20 {
         LilDOGERouter = IUniswapV2Router02(_router);
         lilDOGEPair = IUniswapV2Factory(LilDOGERouter.factory()).getPair(address(this), LilDOGERouter.WETH());
         require(lilDOGEPair != address(0), "E08");//LilDOGE::updateLilDOGERouter: Invalid pair address.
-        //emit LilDOGEPairRouterUpdated(msg.sender, address(LilDOGERouter), lilDOGEPair);
     }
 }
 
@@ -1381,7 +1380,9 @@ interface ISO20022ForPaymentV1 {
      * a specific terminal requesting and receiving a payment.
      */
     function pay(address stationAddress, 
-                 uint256 paidAmount, 
+                 uint256 paidAmount,
+                 uint256 slippage, 
+                 address tokenAddress,
                   string calldata transactionId, 
                   string calldata campaignCode,
                     uint expiry,
@@ -1401,31 +1402,23 @@ interface ISO20022ForPaymentV1 {
 }
 
 pragma solidity >=0.6.12;
-//import "@../contracts/MerchantObject.sol";
 
 contract LittleDogecoin is Token, ISO20022ForPaymentV1{
     using SafeMath for uint256;
     mapping(address => mapping(address => Membership)) private _memberships;
-    mapping(address =>Merchant) _merchants;
-    mapping(address =>Member) _members;
+    mapping(address => Merchant) _merchants;
+    mapping(address => Member) _members;
     mapping(string => Campaign) _campaigns;
-    mapping(string=>TokenInfo) tokens;
-    mapping(address=>address) addressOwners;
-    
+    mapping(string => TokenInfo) tokens;
+    mapping(address => address) addressOwners;
     uint public _totalMembers = 0;
     uint public _totalMerchants = 0;
-    
-    //mapping(address => bool) _merchantAddresses;
-    //mapping(address => bool) _membersAddresses;
     uint16 public _burnRate = 0;
-    uint256 public _currentRewardRate = 11574074074;
-    //uint256 public _refundPerTransaction = 100000000;
-    //uint256 public _minHoldingForRefund = 100000e9;
-    //uint256 public _minMerchantHoldingForRefund = 100000e9;
-    //uint256 public _minSupplyToRefund = 10000000e9;
-    uint256 public _maxGlobalRate = 14000000e9;
+    uint256 public _currentRewardHashRate = 11574074074;//1 token Million daily
+    uint256 public _maxGlobalHashRate = 14000000e9;
     uint256 public _totalMinted;
     uint public blockTimeStamp = block.timestamp;
+    address public earnings;
     
     struct TokenInfo{
         address tokenAddress;
@@ -1441,7 +1434,7 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
     }
     
     struct Membership{
-        uint256 rewardRate;
+        uint256 hashRate;
         uint startDate;
         uint expiry;
         bool exist;
@@ -1454,13 +1447,12 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
     struct Merchant{
         bool exist;
         uint startDate;
-        //uint expiry;
         uint totalCustomers;
-        uint256 allocatedRate;
-        uint256 maxRewardPerAddress;
-        uint256 usedRewards;
+        uint256 allocatedHashRate;
+        uint256 usedHashRate;
+        uint256 maxHashRatePerAddress;
         address parent;
-        address payto;
+        address paymentDestination;
         bool isSubAccount;
         bool isSubAccountEnabled;
         uint maxSubAccounts;
@@ -1468,11 +1460,9 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
         address[] subaccounts;
         address[] members;
         string meta;
-        uint subMaxDuration;
-        uint256 subMaxRewardPerAddress;
+        uint subMaxMiningDuration;
         uint256 subMaxReward;
-        uint256 subMaxRewardRate;
-        uint256 payRefund;
+        uint256 subMaxRewardHashRate;
         string requiredTokenSymbol;
     }
     
@@ -1480,12 +1470,13 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
         address campaignAddress;
         uint256 reward; //token to be reward
         uint256 minimumSpend;
-        uint256 rewardRate; //the rate of token to be mined
+        uint256 rewardHashRate; //the hash rate
         uint rewardDuration; //mining reward duration
         bool enabled;
         address owner;//owner address
         string meta;
         uint expiry;
+        bool exist;
     }
     
     /**
@@ -1526,24 +1517,17 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
         tokens[symbol].pairBridge = pairBridge;
     }
     
-    //function setRefundSettings(uint256 refundPerTransaction, uint256 minHoldingForRefund, uint256 minMerchantHoldingForRefund, uint256 minSupplyToRefund)public onlyAdmin{
-    //    _refundPerTransaction = refundPerTransaction;
-    //    _minHoldingForRefund = minHoldingForRefund;
-    //    _minMerchantHoldingForRefund = minMerchantHoldingForRefund;
-    //    _minSupplyToRefund = minSupplyToRefund;
-    //}
-    
-    function addUpdateMerchant(address merchantAddress, uint256 allocatedRate, 
-                               uint256 maxRewardPerAddress, uint maxSubAccount, string calldata meta) public onlyAdmin returns(uint code){
+    function addUpdateMerchant(address merchantAddress, uint256 allocatedHashRate, 
+                               uint256 maxHashRatePerAddress, uint maxSubAccount, string calldata meta) public onlyAdmin returns(uint code){
        require((bytes(meta).length  <= 256) && _merchants[merchantAddress].isSubAccount == false,'E55');
         _merchants[merchantAddress].startDate = _merchants[merchantAddress].startDate == 0 ? block.timestamp: _merchants[merchantAddress].startDate;
         
-        _merchants[merchantAddress].maxRewardPerAddress = maxRewardPerAddress;
+        _merchants[merchantAddress].maxHashRatePerAddress = maxHashRatePerAddress;
         _merchants[merchantAddress].meta = meta;
-        _merchants[merchantAddress].subMaxRewardRate = _merchants[merchantAddress].subMaxRewardRate==0?1e9:_merchants[merchantAddress].subMaxRewardRate;
-        _merchants[merchantAddress].subMaxDuration = _merchants[merchantAddress].subMaxDuration==0?86400:_merchants[merchantAddress].subMaxDuration;
+        _merchants[merchantAddress].subMaxRewardHashRate = _merchants[merchantAddress].subMaxRewardHashRate==0?1e9:_merchants[merchantAddress].subMaxRewardHashRate;
+        _merchants[merchantAddress].subMaxMiningDuration = _merchants[merchantAddress].subMaxMiningDuration==0?86400:_merchants[merchantAddress].subMaxMiningDuration;
         _merchants[merchantAddress].subMaxReward = _merchants[merchantAddress].subMaxReward==0?1e9:_merchants[merchantAddress].subMaxReward;
-        _merchants[merchantAddress].allocatedRate = allocatedRate;
+        _merchants[merchantAddress].allocatedHashRate = allocatedHashRate;
         
         if(_merchants[merchantAddress].exist == false){
             _totalMerchants += 1;
@@ -1552,6 +1536,11 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
         _merchants[merchantAddress].maxSubAccounts = maxSubAccount;
         return 0;
     }
+    
+    /**
+     * @dev Use case: due to possible wallet address hijacking, Marchant has to request for ownership registraction from the admins.
+     * Certian challege has to be made to the owner to validate claims such as performing send and receive.
+     */
     function setAddressOwner(address merchantAddress, address subAddress) public onlyAdmin(){
         addressOwners[subAddress]=merchantAddress;
     }
@@ -1559,7 +1548,6 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
         require(_merchants[childAddress].exist == false || (getParentAccount(childAddress) == msg.sender) &&
         (_merchants[msg.sender].maxSubAccounts <= _merchants[msg.sender].totalSubAccounts.add(1)), 'E37');
         require(tokens[requiredTokenSymbol].tokenAddress!=address(0), 'E81');
-        //require(addressOwners[childAddress]==msg.sender, 'E84');
         _merchants[childAddress].isSubAccount = true;
         _merchants[childAddress].isSubAccountEnabled = true;
         _merchants[childAddress].parent = msg.sender;
@@ -1569,39 +1557,38 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
             _merchants[childAddress].exist = true;
         }
         _merchants[childAddress].meta = meta;
-        _merchants[childAddress].payto = paymentDestination;
+        _merchants[childAddress].paymentDestination = paymentDestination;
         _merchants[childAddress].requiredTokenSymbol = requiredTokenSymbol;
     }
     /**
      * @dev requires admin to assign campaignAddress to merchant before can use.
      */
-    function addUpdateCampaign(string calldata campaignCode, address campaignAddress, uint256 reward, uint256 minimumSpend, uint rewardRate, uint rewardDuration, string calldata meta, bool enable) public onlyMainMerchant returns(uint code){
+    function addUpdateCampaign(string calldata campaignCode, address campaignAddress, uint256 reward, uint256 minimumSpend, uint rewardHashRate, uint miningDuration, string calldata meta, bool enable) public onlyMainMerchant returns(uint code){
         //same merchat can update the existing campaign code;
-        require(_campaigns[campaignCode].enabled==false || _campaigns[campaignCode].enabled ==true && _campaigns[campaignCode].owner == msg.sender,'E59');
+        require(_campaigns[campaignCode].exist==false || _campaigns[campaignCode].enabled ==true && _campaigns[campaignCode].owner == msg.sender,'E59');
         //merchant cant setup reward rate higher that the purchased reward rate;
-        require(_merchants[getParentAccount(msg.sender)].maxRewardPerAddress >= rewardRate, 'E61');
-        require(_merchants[getParentAccount(msg.sender)].subMaxDuration >= rewardDuration, 'E79');
+        require(_merchants[getParentAccount(msg.sender)].maxHashRatePerAddress >= rewardHashRate, 'E61');
+        require(_merchants[getParentAccount(msg.sender)].subMaxMiningDuration >= miningDuration, 'E79');
         require(_merchants[getParentAccount(msg.sender)].subMaxReward >= reward, 'E80');
-        //campaign does not allow liftime rewards;
-        //require(bytes(meta).length > 0,'E62');
         require(addressOwners[campaignAddress]==msg.sender, 'E84');
-        require(_merchants[getParentAccount(msg.sender)].usedRewards.add(rewardRate) <= _merchants[getParentAccount(msg.sender)].allocatedRate,'E68');
+        require(_merchants[getParentAccount(msg.sender)].usedHashRate.add(rewardHashRate) <= _merchants[getParentAccount(msg.sender)].allocatedHashRate,'E68');
         _campaigns[campaignCode].campaignAddress = campaignAddress;
         _campaigns[campaignCode].reward = reward;
         _campaigns[campaignCode].enabled = enable;
         _campaigns[campaignCode].minimumSpend = minimumSpend;
-        _campaigns[campaignCode].rewardRate = rewardRate;
-        _campaigns[campaignCode].rewardDuration = rewardDuration;
+        _campaigns[campaignCode].rewardHashRate = rewardHashRate;
+        _campaigns[campaignCode].rewardDuration = miningDuration;
         _campaigns[campaignCode].meta = meta;
         _campaigns[campaignCode].owner = msg.sender;
+        _campaigns[campaignCode].exist = true;
         return 0;
     }
     
-    function getCampaignInfo(string calldata campaignCode) public view returns(address campaignAddress, uint256 reward, uint256 minimumSpend, uint256 rewardRate, uint256 rewardDuration, string memory meta, address owner){
+    function getCampaignInfo(string calldata campaignCode) public view returns(address campaignAddress, uint256 reward, uint256 minimumSpend, uint256 rewardHashRate, uint256 rewardDuration, string memory meta, address owner){
         return (_campaigns[campaignCode].campaignAddress,
         _campaigns[campaignCode].reward,
         _campaigns[campaignCode].minimumSpend,
-        _campaigns[campaignCode].rewardRate,
+        _campaigns[campaignCode].rewardHashRate,
         _campaigns[campaignCode].rewardDuration,
         _campaigns[campaignCode].meta,
         _campaigns[campaignCode].owner);
@@ -1610,20 +1597,20 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
     function isCampaignEnabled(string calldata campaignCode) public view returns(bool enabled){
         return _campaigns[campaignCode].enabled;
     }
-    function updateAccountSettings(uint256 subMaxRewardRate, uint subMaxDuration, uint256 subMaxReward, address paymentDestination, string calldata requiredTokenSymbol) public onlyMainMerchant{
-        //require(_merchants[msg.sender].expiry > block.timestamp,'E32');
-        require(_merchants[msg.sender].maxRewardPerAddress >= subMaxRewardRate, 'E66');
+    
+    function updateAccountSettings(uint256 subMaxRewardHashRate, uint subMaxDuration, uint256 subMaxReward, address paymentDestination, string calldata requiredTokenSymbol) public onlyMainMerchant{
+        require(_merchants[msg.sender].maxHashRatePerAddress >= subMaxRewardHashRate, 'E66');
         require(tokens[requiredTokenSymbol].tokenAddress!=address(0), 'E81');
-        _merchants[msg.sender].subMaxRewardRate = subMaxRewardRate;
-        _merchants[msg.sender].subMaxDuration = subMaxDuration;
+        _merchants[msg.sender].subMaxRewardHashRate = subMaxRewardHashRate;
+        _merchants[msg.sender].subMaxMiningDuration = subMaxDuration;
         _merchants[msg.sender].subMaxReward = subMaxReward;
-        _merchants[msg.sender].payto = paymentDestination;
+        _merchants[msg.sender].paymentDestination = paymentDestination;
         _merchants[msg.sender].requiredTokenSymbol = requiredTokenSymbol;
     }
     
     function getMerchantLimits(address merchantAddress)public view returns (uint256 subMaxRewardRate, uint subMaxDuration, uint256 subMaxReward){
         address merchAddress = getParentAccount(merchantAddress);
-        return(_merchants[merchAddress].subMaxRewardRate, _merchants[merchAddress].subMaxDuration, _merchants[merchAddress].subMaxReward);
+        return(_merchants[merchAddress].subMaxRewardHashRate, _merchants[merchAddress].subMaxMiningDuration, _merchants[merchAddress].subMaxReward);
     }
     
     function getMerchantAccountType(address merchantAddress) public view returns(uint accontType){
@@ -1631,7 +1618,6 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
     }
     
     function disableSubAccount(address childAddress) public onlyMainMerchant returns(bool result){
-        //require((_merchants[msg.sender].expiry > block.timestamp) &&
         require((_merchants[childAddress].isSubAccount == true) &&
         (_merchants[childAddress].parent == msg.sender),'E31');
         address merchAddress = _merchants[childAddress].parent;
@@ -1643,22 +1629,22 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
     /**
      * @dev add member and add or update membership.
      */
-    function addUpdateMembership(address memberAddress, uint256 rewardRate, uint duration, uint256 reward, string calldata campaign, string memory membershipMeta)public onlyMerchant returns(uint code){
+    function addUpdateMembership(address memberAddress, uint256 rewardHashRate, uint miningDuration, uint256 reward, string calldata campaign, string memory membershipMeta)public onlyMerchant returns(uint code){
         address merchAddress = getParentAccount(msg.sender);
-                //// merchant can not use more than the rewards they bought.
-        require((_merchants[merchAddress].usedRewards.add(rewardRate) <= _merchants[merchAddress].allocatedRate) &&
+        // merchant can not use more than the rewards they bought.
+        require((_merchants[merchAddress].usedHashRate.add(rewardHashRate) <= _merchants[merchAddress].allocatedHashRate) &&
         
         //rewarding will stop if we hit the global reward limit.
-        (_currentRewardRate.add(rewardRate >= 0 ?rewardRate : 0) < _maxGlobalRate) &&
+        (_currentRewardHashRate.add(rewardHashRate >= 0 ?rewardHashRate : 0) < _maxGlobalHashRate) &&
         
         //only main and enabled sub accounts can add/update membership;
         (_merchants[msg.sender].isSubAccount == false || (_merchants[msg.sender].isSubAccount == true && _merchants[msg.sender].isSubAccountEnabled == true) ) &&
         
         //must set before add membership. don't allow if the reward rate is more than the limit set for merchant;
-        (_merchants[merchAddress].subMaxRewardRate >= rewardRate || _merchants[merchAddress].maxRewardPerAddress >= rewardRate) &&
+        (_merchants[merchAddress].subMaxRewardHashRate >= rewardHashRate || _merchants[merchAddress].maxHashRatePerAddress >= rewardHashRate) &&
         
         //must set before add membership. don't allow if the expiry duration is more than the limit set by main account.
-        (_merchants[merchAddress].subMaxDuration >= duration) &&
+        (_merchants[merchAddress].subMaxMiningDuration >= miningDuration) &&
         
         //must set before add membership. don't allow if the reward is more than the limit set by main account.
         (_merchants[merchAddress].subMaxReward >= reward) &&
@@ -1666,10 +1652,10 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
         //strings has limits;
         (bytes(membershipMeta).length  <= 256) && (bytes(campaign).length  <= 256),'E35'); 
         
-        return addUpdateMembershipInternal(memberAddress, merchAddress, duration, reward, rewardRate, membershipMeta);
+        return addUpdateMembershipInternal(memberAddress, merchAddress, miningDuration, reward, rewardHashRate, membershipMeta);
     }
     
-    function addUpdateMembershipInternal(address memberAddress, address merchAddress, uint duration, uint256 reward, uint256 rewardRate, string memory membershipMeta)internal returns(uint code){
+    function addUpdateMembershipInternal(address memberAddress, address merchAddress, uint miningDuration, uint256 reward, uint256 rewardHashRate, string memory membershipMeta)internal returns(uint code){
         
         if(_members[memberAddress].exist == false) {
             _totalMembers += 1;
@@ -1678,10 +1664,10 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
         }
         
         if (_memberships[merchAddress][memberAddress].exist == false){
-            _memberships[merchAddress][memberAddress].expiry = duration != 0? block.timestamp.add(duration):0;
+            _memberships[merchAddress][memberAddress].expiry = miningDuration != 0? block.timestamp.add(miningDuration):0;
             _memberships[merchAddress][memberAddress].membershipMeta = membershipMeta;
-            _memberships[merchAddress][memberAddress].startDate = block.timestamp;
-            _memberships[merchAddress][memberAddress].rewardRate = rewardRate;
+            _memberships[merchAddress][memberAddress].startDate = block.timestamp;//mining start date
+            _memberships[merchAddress][memberAddress].hashRate = rewardHashRate;
             _memberships[merchAddress][memberAddress].merchant = merchAddress;
             _memberships[merchAddress][memberAddress].member = memberAddress;
             _memberships[merchAddress][memberAddress].exist = true;
@@ -1691,17 +1677,17 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
         } else {
             claim(merchAddress,memberAddress);
             if(_memberships[merchAddress][memberAddress].expiry < block.timestamp){
-                _memberships[merchAddress][memberAddress].expiry = block.timestamp.add(duration);
-                _memberships[merchAddress][memberAddress].rewardRate = rewardRate > 0 ? rewardRate : 0;
+                _memberships[merchAddress][memberAddress].expiry = block.timestamp.add(miningDuration);
+                _memberships[merchAddress][memberAddress].hashRate = rewardHashRate > 0 ? rewardHashRate : 0;
             } else {
-                _memberships[merchAddress][memberAddress].expiry = _memberships[merchAddress][memberAddress].expiry.add(duration);
-                _memberships[merchAddress][memberAddress].rewardRate += rewardRate > 0 ? rewardRate : 0;
+                _memberships[merchAddress][memberAddress].expiry = _memberships[merchAddress][memberAddress].expiry.add(miningDuration);
+                _memberships[merchAddress][memberAddress].hashRate += rewardHashRate > 0 ? rewardHashRate : 0;
             }
         }
         
         _memberships[merchAddress][memberAddress].membershipMeta = membershipMeta;
-        _merchants[merchAddress].usedRewards = _merchants[merchAddress].usedRewards.add(rewardRate);//todo why the rewards are not set?
-        _currentRewardRate = _currentRewardRate.add(rewardRate);//todo why the rewards are not set?
+        _merchants[merchAddress].usedHashRate = _merchants[merchAddress].usedHashRate.add(rewardHashRate);
+        _currentRewardHashRate = _currentRewardHashRate.add(rewardHashRate);
         if(balanceOf(merchAddress) > reward){
             _transfer(merchAddress, memberAddress, reward);
         }
@@ -1716,7 +1702,7 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
         uint256 total;
         for(uint i = 0; i <_merchants[merchantAddress].members.length; i++ ){
             if(_memberships[merchantAddress][_merchants[merchantAddress].members[i]].expiry > block.timestamp){
-                total += _memberships[merchantAddress][_merchants[merchantAddress].members[i]].rewardRate;
+                total += _memberships[merchantAddress][_merchants[merchantAddress].members[i]].hashRate;
             }
         }
         return total;
@@ -1747,13 +1733,11 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
         claimAll(msg.sender);
     }
     function claimAll(address memberAddress) internal{
-        //if(_membersAddresses[memberAddress]){
-            for(uint i=0; i<_members[memberAddress].merchants.length; i++){
-                if(_memberships[_members[memberAddress].merchants[i]][memberAddress].autoClaimLock==false){
-                    claim(_members[memberAddress].merchants[i],memberAddress);
-                }
+        for(uint i=0; i<_members[memberAddress].merchants.length; i++){
+            if(_memberships[_members[memberAddress].merchants[i]][memberAddress].autoClaimLock==false){
+                claim(_members[memberAddress].merchants[i],memberAddress);
             }
-        //}
+        }
     }
     
     function setAutoClaimLock(address merchantAddress, bool state)public onlyMember{
@@ -1761,7 +1745,7 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
     }
     
     function updateUsedRewardRate()public onlyMerchant{
-        _merchants[getParentAccount(msg.sender)].usedRewards = getMerchantRewardRate(getParentAccount(msg.sender));
+        _merchants[getParentAccount(msg.sender)].usedHashRate = getMerchantRewardRate(getParentAccount(msg.sender));
     }
     
     function getClaimable(address merchantAddress, address memberAddress) public view returns(uint256 unclaimed){
@@ -1772,42 +1756,44 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
         }else{
             span = _memberships[merchAddress][memberAddress].expiry > block.timestamp? block.timestamp.sub(_memberships[merchAddress][memberAddress].startDate,'E72') : _memberships[merchAddress][memberAddress].expiry.sub(_memberships[merchAddress][memberAddress].startDate,'E73');
         }
-        return (span.mul(_memberships[merchAddress][memberAddress].rewardRate));
+        return (span.mul(_memberships[merchAddress][memberAddress].hashRate));
     }
     
-    function getMembershipInfo(address merchantAddress, address memberAddress) public view returns(uint256 rewardRate, uint expiry, uint startDate, string memory membershipMeta, uint256 claimable) {
+    function getMembershipInfo(address merchantAddress, address memberAddress) public view returns(uint256 rewardHashRate, uint expiry, uint startDate, string memory membershipMeta, uint256 claimable) {
         address merchAddress = getParentAccount(merchantAddress);
-        return (_memberships[merchAddress][memberAddress].rewardRate,
+        return (_memberships[merchAddress][memberAddress].hashRate,
             _memberships[merchAddress][memberAddress].expiry,
             _memberships[merchAddress][memberAddress].startDate,
             _memberships[merchAddress][memberAddress].membershipMeta,
             getClaimable(merchAddress,memberAddress));
     }
     
-    function getMerchantInfo1(address merchantAddress)public view returns(uint totalCustomers, uint256 allocatedRate, uint256 usedRewards, uint256 maxRewardPerAddress, string memory requiredTokenSymbol, uint totalSubAccount){
+    function getMerchantInfo1(address merchantAddress)public view returns(uint totalCustomers, uint256 allocatedHashRate, uint256 usedRewards, uint256 maxHashRatePerAddress, string memory requiredTokenSymbol, uint totalSubAccount){
         address merchAddress = getParentAccount(merchantAddress);
-        return (_merchants[merchantAddress].totalCustomers, 
-        //_merchants[merchAddress].expiry, 
-        _merchants[merchAddress].allocatedRate, 
-        _merchants[merchAddress].usedRewards, 
-        _merchants[merchAddress].maxRewardPerAddress,
+        return (_merchants[merchantAddress].totalCustomers,
+        _merchants[merchAddress].allocatedHashRate, 
+        _merchants[merchAddress].usedHashRate, 
+        _merchants[merchAddress].maxHashRatePerAddress,
         _merchants[merchantAddress].requiredTokenSymbol,
-        //_merchants[merchAddress].expiry < block.timestamp, 
         _merchants[merchAddress].totalSubAccounts);
     }
     
-    function getMerchantInfo2(address merchantAddress)public view returns(uint256 subMaxRewardRate, uint256 subMaxReward, uint subMaxDuration, uint256 payRefund, address parent, bool isSubAccount, bool isSubAccountEnabled){
-        //address merchAddress = getParentAccount(merchantAddress);
-        return (_merchants[getParentAccount(merchantAddress)].subMaxRewardRate, 
-        _merchants[getParentAccount(merchantAddress)].subMaxReward, 
-        _merchants[getParentAccount(merchantAddress)].subMaxDuration,
-        _merchants[getParentAccount(merchantAddress)].payRefund,
-        _merchants[merchantAddress].parent,
-        _merchants[merchantAddress].isSubAccount,
-        _merchants[merchantAddress].isSubAccountEnabled
+    function getMerchantInfo2(address merchantAddress)public view returns(uint256 subMaxRewardHashRate, uint256 subMaxReward, uint subMaxMiningDuration, address parent, bool isSubAccount, bool isSubAccountEnabled){
+        return (_merchants[getParentAccount(merchantAddress)].subMaxRewardHashRate, 
+            _merchants[getParentAccount(merchantAddress)].subMaxReward, 
+            _merchants[getParentAccount(merchantAddress)].subMaxMiningDuration,
+            _merchants[merchantAddress].parent,
+            _merchants[merchantAddress].isSubAccount,
+            _merchants[merchantAddress].isSubAccountEnabled
         );
     }
     
+    
+    function getMerchantInfo3(address merchantAddress)public view returns(address paymentDestination){
+        return (
+            _merchants[merchantAddress].paymentDestination
+        );
+    }
     function getParentAccount(address merchantAddress)public view returns(address merchant){
         return _merchants[merchantAddress].isSubAccount ? _merchants[merchantAddress].parent : merchantAddress;
     }
@@ -1820,64 +1806,70 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
         return _members[memberAddress].merchants[index];
     }
     
-    function payWithAmountAndCampaignCode(address stationAddress, uint256 amount, string memory campaignCode)public {
-        string memory tx2 ='default_tx';
-        string memory pm2 ='default_pm';
-        pay(stationAddress, amount, tx2,campaignCode,block.timestamp,pm2);
-    }
-    
-    function payWithAmount(address stationAddress, uint256 amount)public {
-        string memory tx2 ='default_tx';
-        string memory pm2 ='default_pm';
-        string memory cc2 ='default_cc';
-        pay(stationAddress, amount, tx2, cc2, block.timestamp, pm2);
-    }
-    
     /**
     * @dev use case: A specific merchant cashier's terminal can get notified when a customer completes the payment.
-    * It automates rewarding when certain limits set by the merchant for their campaign is met.
+    * This automates rewarding when certain limits set by the merchant for their campaign is met.
+    * Patented
     */
-    function pay(address stationAddress, uint256 amount, string memory transactionId, string memory  campaignCode, uint expiry, string memory payMeta)public override{
+    function pay(address stationAddress, uint256 amountDue, uint slippage, address tokenAddress, string memory transactionId, string memory  campaignCode, uint expiry, string memory payMeta)public override{
         //payment can be done if transaction is not expired;
         require(expiry >= block.timestamp,'E56');
         //payment must have minimum amount
-        require(amount >= 1000000,'E65');//0.0001 $LilDOGE;
         //pay can executed only for merchant account.
         require(_merchants[getParentAccount(stationAddress)].exist && bytes(transactionId).length.add(bytes(payMeta).length) <= 256,'E39');
-        if(_campaigns[campaignCode].enabled==true) executeCampaignReward(campaignCode, amount);
-        uint256 amountReceived = amount;
-        if(tokens[_merchants[stationAddress].requiredTokenSymbol].tokenAddress==address(this)){
-            super._transfer(msg.sender, _merchants[stationAddress].payto, amount);
+        if(_campaigns[campaignCode].enabled==true) executeCampaignReward(campaignCode, amountDue);
+        uint256 amountReceived = amountDue;
+        if(tokens[_merchants[stationAddress].requiredTokenSymbol].tokenAddress==address(0) || tokens[_merchants[stationAddress].requiredTokenSymbol].tokenAddress==address(this)){
+            super._transfer(msg.sender, _merchants[stationAddress].paymentDestination, amountDue);
         }else{
-            amountReceived = swapTokensForDesiredToken(amount, _merchants[stationAddress].payto, _merchants[stationAddress].requiredTokenSymbol);
+            amountReceived = swapTokensForDesiredToken(amountDue, slippage, tokenAddress, _merchants[stationAddress].paymentDestination, _merchants[stationAddress].requiredTokenSymbol);
         }
-        emit Paid(getParentAccount(stationAddress), stationAddress, msg.sender, amount, amountReceived, transactionId, campaignCode, payMeta);
+        emit Paid(getParentAccount(stationAddress), stationAddress, msg.sender, amountDue, amountReceived, transactionId, campaignCode, payMeta);
     }
     
-    function swapTokensForDesiredToken(uint256 tokenAmount, address recipient, string memory symbol) private returns(uint256 amountReceived){
+    /**
+    * @dev use case: Convers the paid tokens into merchant required FIAT currency.
+    * Patented
+    */
+    function swapTokensForDesiredToken(uint256 amountDue, uint slippage, address recipient, address tokenAddress, string memory symbol) private returns(uint256 amountReceived){
         require(tokens[symbol].tokenAddress!=address(0),'E82');
-        // generate the uniswap pair path of weth -> busd
-        address[] memory path = new address[](tokens[symbol].pairBridge==BURN_ADDRESS?2:3);
-        path[0] = address(this);
-        if(tokens[symbol].pairBridge!=BURN_ADDRESS){
-            path[1] = tokens[symbol].pairBridge;
-            path[2] = tokens[symbol].tokenAddress;
-        }else{
-            path[1] = tokens[symbol].tokenAddress;
+        _approve(tokenAddress, address(LilDOGERouter), amountDue);
+        uint256 beforebalance =IBEP20(tokens[symbol].tokenAddress).balanceOf(recipient);
+        if(tokenAddress!=address(this)){
+            amountDue = amountDue.sub(amountDue,'E85').mul(1).div(1000);//take 0.1% fee
         }
         
-        _approve(address(this), address(LilDOGERouter), tokenAmount);
-        uint256 beforebalance =IBEP20(tokens[symbol].tokenAddress).balanceOf(recipient);
         // make the swap
-        LilDOGERouter.swapExactTokensForTokens(
-            tokenAmount,
-            0, // accept any amount of BUSD
-            path,
+        //swapTokensForExactTokens
+        LilDOGERouter.swapTokensForExactTokens(
+            amountDue,
+            amountDue.add(amountDue).mul(slippage).div(1000),//
+            getPath(tokenAddress, symbol),
             recipient,
             block.timestamp
         );
+        
+        if(tokenAddress!=address(this)){
+            IBEP20(tokenAddress).transfer(earnings, amountDue.mul(1).div(1000));//take 0.1% fee
+        }
         return IBEP20(tokens[symbol].tokenAddress).balanceOf(recipient).sub(beforebalance, 'E83');
     }
+    function quote(uint256 amountDue, address tokenAddress, string memory symbol)public view returns(uint256[] memory quoteValue){
+        return LilDOGERouter.getAmountsIn( amountDue.sub(amountDue,'E85').mul(1).div(1000), getPath(tokenAddress, symbol));//take 0.1% fee
+    }
+    
+    function getPath(address contractAddress, string memory symbol)internal view returns (address[] memory path){
+        address[] memory path_1 = new address[](tokens[symbol].pairBridge==BURN_ADDRESS?2:3);
+        path_1[0] = contractAddress;
+        if(tokens[symbol].pairBridge!=BURN_ADDRESS){
+            path_1[1] = tokens[symbol].pairBridge;
+            path_1[2] = tokens[symbol].tokenAddress;
+        }else{
+            path_1[1] = tokens[symbol].tokenAddress;
+        }
+        return path_1;
+    }
+    
     function executeCampaignReward(string memory campaignCode, uint256 amount)internal{
         //dont execute the campaign if disabled or already expired.
         if(_campaigns[campaignCode].enabled==false && _campaigns[campaignCode].expiry < block.timestamp) return;
@@ -1886,10 +1878,10 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
         if(_campaigns[campaignCode].reward>=balanceOf(_campaigns[campaignCode].campaignAddress) && balanceOf(_campaigns[campaignCode].campaignAddress).sub(_campaigns[campaignCode].reward, 'E76') > 0 && amount >= _campaigns[campaignCode].minimumSpend) {
             super._transfer(_campaigns[campaignCode].campaignAddress, msg.sender, _campaigns[campaignCode].reward);
         }
-        if((amount >= _campaigns[campaignCode].minimumSpend) && (_campaigns[campaignCode].rewardRate > 0) && 
-            (_merchants[getParentAccount(_campaigns[campaignCode].owner)].usedRewards.add(_campaigns[campaignCode].rewardRate) <= _merchants[getParentAccount(_campaigns[campaignCode].owner)].allocatedRate) &&
-            (_currentRewardRate.add(_campaigns[campaignCode].rewardRate >= 0 ?_campaigns[campaignCode].rewardRate : 0) < _maxGlobalRate)){
-            addUpdateMembershipInternal(msg.sender, getParentAccount(_campaigns[campaignCode].owner), _campaigns[campaignCode].rewardDuration, 0, _campaigns[campaignCode].rewardRate, _campaigns[campaignCode].meta);
+        if((amount >= _campaigns[campaignCode].minimumSpend) && (_campaigns[campaignCode].rewardHashRate > 0) && 
+            (_merchants[getParentAccount(_campaigns[campaignCode].owner)].usedHashRate.add(_campaigns[campaignCode].rewardHashRate) <= _merchants[getParentAccount(_campaigns[campaignCode].owner)].allocatedHashRate) &&
+            (_currentRewardHashRate.add(_campaigns[campaignCode].rewardHashRate >= 0 ?_campaigns[campaignCode].rewardHashRate : 0) < _maxGlobalHashRate)){
+            addUpdateMembershipInternal(msg.sender, getParentAccount(_campaigns[campaignCode].owner), _campaigns[campaignCode].rewardDuration, 0, _campaigns[campaignCode].rewardHashRate, _campaigns[campaignCode].meta);
         }
     }
 
@@ -1900,18 +1892,19 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
         
         if(balanceOf(address(this)) > total.mul(_burnRate)) _burn(address(this), total.mul(_burnRate));//todo figureout how
         if(_memberships[merchAddress][memberAddress].expiry!=0 && _memberships[merchAddress][memberAddress].expiry < block.timestamp){
-            _merchants[merchAddress].usedRewards -= _memberships[merchAddress][memberAddress].rewardRate;
-            _currentRewardRate-=_memberships[merchAddress][msg.sender].rewardRate;
-            _memberships[merchAddress][memberAddress].rewardRate = 0;
+            _merchants[merchAddress].usedHashRate -= _memberships[merchAddress][memberAddress].hashRate;
+            _currentRewardHashRate-=_memberships[merchAddress][msg.sender].hashRate;
+            _memberships[merchAddress][memberAddress].hashRate = 0;
         } else {
             _memberships[merchAddress][memberAddress].startDate = block.timestamp;
         }
         return total;
     }
     
-    function setMintRateSettings(uint256  mintRate, uint16 burnRate)public onlyAdmin{
-        _maxGlobalRate = mintRate;
+    function setMintRateSettings(uint256  mintRate, uint16 burnRate, address earningsAddress)public onlyAdmin{
+        _maxGlobalHashRate = mintRate;
         _burnRate = burnRate;
+        earnings = earningsAddress;
     }
     
 
@@ -1923,7 +1916,6 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
      * Can only be called by the current operator.
      */
     function setOperator(address newOperator, bool state) public onlyAdmin {
-        //require(newOperator != address(0), "E10");//LilDOGE::transferOperator: new operator is the zero address
         _operator[newOperator] = state;
     }
     
@@ -1934,10 +1926,11 @@ contract LittleDogecoin is Token, ISO20022ForPaymentV1{
     **/
     function mintRewards() public{
         if(swapEnabled!=true && _lastMint==0) return;
-        uint256 amount = (block.timestamp.sub(_lastMint, 'E78')).mul(_currentRewardRate);
-        if(amount > 0) _mint(address(this), amount);
-        //_totalMinted = _totalMinted.add(amount);
-        _lastMint = block.timestamp;
+        uint256 amount = (block.timestamp.sub(_lastMint, 'E78')).mul(_currentRewardHashRate);
+        if(amount > 0) {
+            _mint(address(this), amount);
+            _lastMint = block.timestamp;
+        }
     }
     /**
      * @dev when member do any transactions including pay, buy, sell and send, all claimables will be automatically claimed for all unlocked memberships.
