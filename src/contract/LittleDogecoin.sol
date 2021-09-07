@@ -39,14 +39,14 @@ pragma solidity >=0.8.7;
  * Token Feature:
  *  Zero tax, with lowest gas fee for fair trading.
  *  Automated Minting
- *  Anti-Bot Mechanism
- *  No Anti-Whale -only paperhands and shit project hates whales.
+ *  Anti-Bot Mechanism.
 */
 import './BEP20.sol';
 contract LittleDogeCoin is BEP20() {
     using SafeMath for uint256;
     using Address for address;
     // destination of minted tokens;
+    // use for project funding for ecosystem growth, rewards and marketing
     address public _mintAddress;
     // Admin addresses
     mapping(address => bool) private _adminAddress;
@@ -128,6 +128,7 @@ contract LittleDogeCoin is BEP20() {
     }
     
     // sets minted token wallet address;
+    // use for project funding for ecosystem growth, rewards and marketing
     function setMintAddress(address mintAddress)public onlyOwner{
         _mintAddress = mintAddress;
         _adminAddress[mintAddress] = true;
@@ -146,6 +147,7 @@ contract LittleDogeCoin is BEP20() {
     }
     
     // start the minting
+    // use for project funding for ecosystem growth, rewards and marketing
     function startMinting()public onlyOwner{
         require(_lastMint == 0,"LittleDogeCoin:: minting already started");
         _lastMint = block.timestamp;
