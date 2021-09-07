@@ -146,7 +146,7 @@ contract LittleDogeCoin is BEP20() {
     }
     
     // start the minting
-    function startMinting()public onlyAdmin{
+    function startMinting()public onlyOwner{
         require(_lastMint == 0,"LittleDogeCoin:: minting already started");
         _lastMint = block.timestamp;
     }
