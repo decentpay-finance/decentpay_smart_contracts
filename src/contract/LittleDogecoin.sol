@@ -26,7 +26,7 @@ pragma solidity >=0.8.7;
  * Little Dogecoin is one of the native token of the biggest defi project, the      
  *      Decentralised Liquidity-Based Cross-Asset Multi-Station Payment Gateway
  * 
- * Daily minted token will be used mainly for reward and marketing and payment refund.
+ * Daily minted token will be used mainly for ecosystem growth, reward and marketing and payment refund.
  * Project Features
  *  Payment with auto-convertion stable coin, such as USDT, BUSD, DAI, EUR, or any Token.
  *  Remittance transfer with customized DApp;
